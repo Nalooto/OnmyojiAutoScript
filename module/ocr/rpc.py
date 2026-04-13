@@ -46,7 +46,8 @@ def _is_port_in_use(host: str, port: int) -> bool:
 
 
 def _serialize_image(image: np.ndarray) -> bytes:
-    return pickle.dumps((image.shape, image.dtype.str, image.tobytes()), protocol=4)
+    image = np.ascontiguousarray(image)
+    return pickle.dumps((image.shape, image.dtype.str, image.tobytes()), protocol=pickle.HIGHEST_PROTOCOL)
 
 
 def _deserialize_image(image_bytes: bytes) -> np.ndarray:

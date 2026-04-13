@@ -218,7 +218,7 @@ class Script:
         # return msgpack.packb(cv2.imencode('.jpg', self.device.screenshot())[1].tobytes())
         img = cv2.cvtColor(self.device.screenshot(), cv2.COLOR_RGB2BGR)
         self.device.stuck_record_clear()
-        ret, buffer = cv2.imencode('.jpg', img)
+        ret, buffer = cv2.imencode('.jpg', img, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
         yield buffer.tobytes()
 
     def _gui_update_tasks(self) -> None:
