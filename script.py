@@ -16,7 +16,7 @@ import json
 
 from datetime import date
 import threading
-from typing import Callable
+from typing import Any, Callable
 from datetime import datetime, timedelta
 from pathlib import Path
 from cached_property import cached_property
@@ -56,6 +56,8 @@ class Script:
         self.failure_record = {}
         # 运行loop的线程
         self.loop_thread: Thread = None
+        self.stop_event = threading.Event()
+        self._task_module_cache: dict[str, Any] = {}
 
     @cached_property
     def config(self) -> "Config":
@@ -182,11 +184,18 @@ class Script:
 
         path = f'{task}.{group}.{argument}'
         task_object = getattr(self.config.model, task, None)
-        group_object = getattr(task_object, group, None)
-        argument_object = getattr(group_object, argument, None)
+        if task_object is None:
+            logger.error(f'Set arg {path} failed: task not found')
+            return False
 
+        group_object = getattr(task_object, group, None)
+        if group_object is None:
+            logger.error(f'Set arg {path} failed: group not found')
+            return False
+
+        argument_object = getattr(group_object, argument, None)
         if argument_object is None:
-            logger.error(f'Set arg {task}.{group}.{argument}.{value} failed')
+            logger.error(f'Set arg {path} failed: argument not found')
             return False
 
         try:
@@ -283,16 +292,15 @@ class Script:
         """
         future = future + timedelta(seconds=1)
         self.config.start_watching()
-        while 1:
+        while True:
+            if self.stop_event.is_set():
+                return False
+
             if datetime.now() > future:
                 return True
-            # if self.stop_event is not None:
-            #     if self.stop_event.is_set():
-            #         logger.info("Update event detected")
-            #         logger.info(f"[{self.config_name}] exited. Reason: Update")
-            #         exit(0)
 
-            time.sleep(5)
+            if self.stop_event.wait(1):
+                return False
 
             if self.config.should_reload():
                 return False
@@ -303,6 +311,9 @@ class Script:
         :return:
         """
         while True:
+            if self.stop_event.is_set():
+                return None
+
             task = self.config.get_next()
             self.config.task = task
             if self.state_queue:
@@ -314,7 +325,9 @@ class Script:
             # 根据策略执行等待逻辑
             if not self._handle_wait_during_idle(task.next_run):
                 # 若等待被打断, 则刷新配置
-                del_cached_property(self, "config")
+                if self.stop_event.is_set():
+                    return None
+                self.config.reload()
 
     def _handle_wait_during_idle(self, next_run: datetime) -> bool:
         """
@@ -372,13 +385,17 @@ class Script:
         """
         if command == 'start' or command == 'goto_main':
             logger.error(f'Invalid command `{command}`')
+            return False
 
         try:
             self.device.screenshot()
-            module_name = 'script_task'
-            module_path = str(Path.cwd() / 'tasks' / command / (module_name+'.py'))
+            module_path = str(Path.cwd() / 'tasks' / command / 'script_task.py')
+            module_name = f'script_task_{command}'
             logger.info(f'module_path: {module_path}, module_name: {module_name}')
-            task_module = load_module(module_name, module_path)
+            task_module = self._task_module_cache.get(module_path)
+            if task_module is None:
+                task_module = load_module(module_name, module_path)
+                self._task_module_cache[module_path] = task_module
             task_module.ScriptTask(config=self.config, device=self.device).run()
         except TaskEnd:
             return True
@@ -456,7 +473,7 @@ class Script:
             else:
                 show_window_by_name(target_window_name)
                 
-        while 1:
+        while not self.stop_event.is_set():
             if date.today() > start_day:
                 with _log_switch_lock:
                     logger.set_file_logger(self.config_name, do_cleanup=True)
@@ -481,12 +498,15 @@ class Script:
 
             # Get task
             task = self.get_next_task()
+            if task is None:
+                logger.info(f"Scheduler loop stopping: {self.config_name}")
+                break
             _ = self.device
             # Skip first restart
             if self.is_first_task and task == 'Restart':
                 logger.info('Skip task `Restart` at scheduler start')
                 self.config.task_delay(task='Restart', success=True, server=True)
-                del_cached_property(self, 'config')
+                self.config.reload()
                 continue
 
             # Run
@@ -524,11 +544,11 @@ class Script:
                 exit(1)
 
             if success:
-                del_cached_property(self, 'config')
+                self.config.reload()
                 continue
             elif self.config.script.error.handle_error:
                 # self.config.task_delay(success=False)
-                del_cached_property(self, 'config')
+                self.config.reload()
                 # self.checker.check_now()
                 continue
             else:
@@ -540,8 +560,18 @@ class Script:
         :return:
         """
         if self.loop_thread is None:
+            self.stop_event.clear()
             self.loop_thread = Thread(target=self.loop, name='Script_loop')
             self.loop_thread.start()
+
+    def stop_loop(self, timeout: float = 5.0) -> None:
+        """
+        Stop the scheduler loop thread gracefully.
+        """
+        self.stop_event.set()
+        if self.loop_thread is not None and self.loop_thread.is_alive():
+            self.loop_thread.join(timeout=timeout)
+            self.loop_thread = None
 
 
 if __name__ == "__main__":

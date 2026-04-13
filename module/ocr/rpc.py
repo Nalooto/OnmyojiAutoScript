@@ -45,6 +45,19 @@ def _is_port_in_use(host: str, port: int) -> bool:
         s.close()
 
 
+def _serialize_image(image: np.ndarray) -> bytes:
+    return pickle.dumps((image.shape, image.dtype.str, image.tobytes()), protocol=4)
+
+
+def _deserialize_image(image_bytes: bytes) -> np.ndarray:
+    image = pickle.loads(image_bytes)
+    if isinstance(image, tuple) and len(image) == 3:
+        shape, dtype_str, data = image
+        if isinstance(data, (bytes, bytearray)):
+            return np.frombuffer(data, dtype=np.dtype(dtype_str)).reshape(shape)
+    return image
+
+
 def ensure_ocr_server_started() -> bool:
     from module.server.setting import State
 
@@ -132,7 +145,7 @@ class OcrServer:
         return image
 
     def ocr_single_line(self, image_bytes: bytes):
-        image = pickle.loads(image_bytes)
+        image = _deserialize_image(image_bytes)
         result, score = self.model.ocr_single_line(image)
         return result, float(score)
 
@@ -144,7 +157,7 @@ class OcrServer:
         box_thresh: Optional[float] = None,
         vertical: bool = False,
     ) -> List[Dict[str, Any]]:
-        image = pickle.loads(image_bytes)
+        image = _deserialize_image(image_bytes)
         if not vertical:
             results = self.model.detect_and_ocr(image, drop_score=drop_score,
                                                 unclip_ratio=unclip_ratio,
@@ -187,7 +200,7 @@ class ModelProxy:
             raise ScriptError(f"OCR server connection failed: {self.address}") from e
 
     def ocr_single_line(self, image: np.ndarray):
-        payload = pickle.dumps(image, protocol=4)
+        payload = _serialize_image(image)
         return self.client.ocr_single_line(payload)
 
     def detect_and_ocr(
@@ -198,7 +211,7 @@ class ModelProxy:
         box_thresh: Optional[float] = None,
         vertical: bool = False,
     ):
-        payload = pickle.dumps(image, protocol=4)
+        payload = _serialize_image(image)
         results = self.client.detect_and_ocr(payload, drop_score, unclip_ratio, box_thresh, vertical)
         from ppocronnx.predict_system import BoxedResult
         return [

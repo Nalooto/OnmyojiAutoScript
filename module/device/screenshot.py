@@ -55,11 +55,12 @@ class Screenshot(Adb, DroidCast, Scrcpy, Window, NemuIpc):
         self._screenshot_interval.wait()
         self._screenshot_interval.reset()
 
+        method = self.screenshot_methods.get(
+            self.config.script.device.screenshot_method,
+            self.screenshot_adb
+        )
+
         for _ in range(2):
-            method = self.screenshot_methods.get(
-                self.config.script.device.screenshot_method,
-                self.screenshot_adb  # 第二个参数默认的是screenshot_adb
-            )
             self.image = method()
 
             # if self.config.Emulator_ScreenshotDedithering:
