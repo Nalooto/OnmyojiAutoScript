@@ -29,7 +29,7 @@ class HyakkiyakouConfig(ConfigBase):
     hya_invite_friend: bool = Field(default=False, description='hya_invite_friend_help')
     hya_onmyoji: Onmyoji = Field(default=Onmyoji.KAGURA, description='切换阴阳师')
     # 自动调整豆子数量
-    hya_auto_bean: bool = Field(default=False, description='hya_auto_bean_help')
+    hya_auto_bean: bool = Field(default=True, description='hya_auto_bean_help')
     hya_priorities: str = Field(default='', description='hya_priorities_help')
     hya_sp: float = Field(default=1., description='hya_sp_help')
     hya_ssr: float = Field(default=1., description='hya_ssr_help')
@@ -63,10 +63,10 @@ class DebugConfig(ConfigBase):
     # 单独的设定截屏间隔, 单位ms
     hya_interval: float = Field(default=300, description='hya_interval_help')
     # 单独的截屏设置
-    hya_screenshot_method: ScreenshotMethod = Field(default=ScreenshotMethod.WINDOW_BACKGROUND,
+    hya_screenshot_method: ScreenshotMethod = Field(default=ScreenshotMethod.NEMU_IPC,
                                                     description='hya_screenshot')
     # 单独的点击
-    hya_control_method: ControlMethod = Field(default=ControlMethod.WINDOW_MESSAGE,
+    hya_control_method: ControlMethod = Field(default=ControlMethod.MINITOUCH,
                                               description='hya_control_method')
 
     hide_fields = dynamic_hide('continuous_learning')

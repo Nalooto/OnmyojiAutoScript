@@ -135,11 +135,39 @@ class RuleImage:
         :param roi
         :return:
         """
+        # 检查输入图像是否有效
+        if image is None or len(image.shape) < 2:
+            logger.warning("Invalid input image for cropping")
+            return image if image is not None else np.array([])
+            
         if roi is None:
+            if self.roi_back is None:
+                return image
             x, y, w, h = self.roi_back
         else:
             x, y, w, h = roi
         x, y, w, h = int(x), int(y), int(w), int(h)
+        
+        # 获取图像尺寸
+        image_height, image_width = image.shape[:2]
+        
+        # 如果图像尺寸为0，返回原图
+        if image_height <= 0 or image_width <= 0:
+            logger.warning(f"Zero-sized image for cropping: {image.shape}")
+            return image
+        
+        # 添加边界检查，防止ROI越界
+        x = max(0, min(x, image_width - 1))
+        y = max(0, min(y, image_height - 1))
+        w = max(0, min(w, image_width - x))
+        h = max(0, min(h, image_height - y))
+        
+        # 如果裁剪区域无效，返回一个1x1的区域（避免空数组）
+        if w <= 0 or h <= 0:
+            logger.warning(f"Invalid ROI for cropping: x={x}, y={y}, w={w}, h={h}, image_size=({image_width}, {image_height})")
+            # 返回左上角1x1像素
+            return image[0:1, 0:1] if len(image.shape) >= 2 else image
+        
         return image[y:y + h, x:x + w]
 
     def _template_image_invalid(self, mat: np.array) -> bool:
@@ -167,7 +195,7 @@ class RuleImage:
         res = cv2.matchTemplate(source, mat, cv2.TM_CCOEFF_NORMED)
         _, max_val, _, max_loc = cv2.minMaxLoc(res)
         if self.debug_mode:
-            logger.attr(self.name, f'matching score {max_val:.5f}')
+            logger.attr(self.name, f'matching score {max_val:.5f}')  # 输出匹配得分
 
         if max_val > threshold:
             self._update_roi_front(max_loc, (mat.shape[1], mat.shape[0]))
