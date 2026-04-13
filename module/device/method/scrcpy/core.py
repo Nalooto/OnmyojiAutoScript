@@ -1,3 +1,4 @@
+import select
 import socket
 import struct
 import threading
@@ -193,6 +194,14 @@ class ScrcpyCore(Connection):
         codec = CodecContext.create("h264", "r")
         while self._scrcpy_alive:
             try:
+                if self._scrcpy_video_socket is None:
+                    time.sleep(0.05)
+                    continue
+
+                ready, _, _ = select.select([self._scrcpy_video_socket], [], [], 0.1)
+                if not ready:
+                    continue
+
                 raw_h264 = self._scrcpy_video_socket.recv(0x10000)
                 if raw_h264 == b"":
                     raise ScrcpyError("Video stream is disconnected")
@@ -206,8 +215,7 @@ class ScrcpyCore(Connection):
                         self._scrcpy_last_frame_time = time.time()
                         self._scrcpy_resolution = (frame.shape[1], frame.shape[0])
             except (BlockingIOError, InvalidDataError):
-                # only return nonempty frames, may block cv2 render thread
-                time.sleep(0.001)
+                continue
             except (ConnectionError, OSError) as e:  # Socket Closed
                 if self._scrcpy_alive:
                     logger.error(f'_scrcpy_stream_loop_thread: {repr(e)}')

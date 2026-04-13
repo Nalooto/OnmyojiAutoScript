@@ -57,6 +57,7 @@ class Script:
         # 运行loop的线程
         self.loop_thread: Thread = None
         self.stop_event = threading.Event()
+        self.tasks_root = str(Path.cwd() / 'tasks')
         self._task_module_cache: dict[str, Any] = {}
 
     @cached_property
@@ -265,12 +266,12 @@ class Script:
         :return:
         """
         result = {}
-        for key, value in self.config.model.dict().items():
+        for key, value in self.config.model.__dict__.items():
             if isinstance(value, str):
                 continue
             if key == "restart":
                 continue
-            if "scheduler" not in value:
+            if getattr(value, 'scheduler', None) is None:
                 continue
 
             scheduler = value["scheduler"]
@@ -389,7 +390,7 @@ class Script:
 
         try:
             self.device.screenshot()
-            module_path = str(Path.cwd() / 'tasks' / command / 'script_task.py')
+            module_path = os.path.join(self.tasks_root, command, 'script_task.py')
             module_name = f'script_task_{command}'
             logger.info(f'module_path: {module_path}, module_name: {module_name}')
             task_module = self._task_module_cache.get(module_path)
@@ -544,11 +545,9 @@ class Script:
                 exit(1)
 
             if success:
-                self.config.reload()
                 continue
             elif self.config.script.error.handle_error:
                 # self.config.task_delay(success=False)
-                self.config.reload()
                 # self.checker.check_now()
                 continue
             else:

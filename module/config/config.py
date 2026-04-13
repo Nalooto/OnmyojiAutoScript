@@ -9,6 +9,7 @@ import random
 
 from datetime import datetime, timedelta
 from cached_property import cached_property
+from pydantic import BaseModel
 from threading import Lock
 
 from module.base.filter import Filter
@@ -27,29 +28,31 @@ from module.logger import logger
 
 
 class Function:
-    def __init__(self, key: str, data: dict):
+    def __init__(self, key: str, data: dict | BaseModel):
         """
         输入的是每一个ConfigModel的一个字段对象
         :param data:
         """
-        if isinstance(data, dict) is False:
-            self.enable = False
-            self.command = "Unknown"
-            self.next_run = DEFAULT_TIME
-            return
-        if data.get("scheduler") is None:
+        if isinstance(data, dict):
+            scheduler = data.get("scheduler")
+        elif isinstance(data, BaseModel):
+            scheduler = getattr(data, "scheduler", None)
+        else:
+            scheduler = None
+
+        if scheduler is None:
             self.enable = False
             self.command = "Unknown"
             self.next_run = DEFAULT_TIME
             return
 
-        self.enable: bool = data['scheduler']['enable']
+        self.enable: bool = scheduler['enable'] if isinstance(scheduler, dict) else scheduler.enable
         self.command: str = ConfigModel.type(key)
-        next_run = data['scheduler']['next_run']
+        next_run = scheduler['next_run'] if isinstance(scheduler, dict) else scheduler.next_run
         if isinstance(next_run, str):
             next_run = datetime.strptime(next_run, "%Y-%m-%d %H:%M:%S")
         self.next_run: datetime = next_run
-        priority = data['scheduler']['priority']
+        priority = scheduler['priority'] if isinstance(scheduler, dict) else scheduler.priority
         if isinstance(priority, str):
             priority = int(priority)
         self.priority: int = priority
@@ -183,7 +186,7 @@ class Config(ConfigState, ConfigManual, ConfigWatcher, ConfigMenu):
         waiting_task = []
         error = []
         self.scheduler_update_dt = datetime.now()
-        for key, value in self.model.dict().items():
+        for key, value in self.model.__dict__.items():
             func = Function(key, value)
             if not func.enable:
                 continue

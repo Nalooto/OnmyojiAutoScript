@@ -76,12 +76,12 @@ class ConfigModify(Config):
         :return:
         """
         result = {}
-        for key, value in self.model.dict().items():
+        for key, value in self.model.__dict__.items():
             if isinstance(value, str):
                 continue
             if key == "restart":
                 continue
-            if "scheduler" not in value:
+            if getattr(value, 'scheduler', None) is None:
                 continue
 
             scheduler = value["scheduler"]

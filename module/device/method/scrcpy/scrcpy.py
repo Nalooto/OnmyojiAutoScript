@@ -83,13 +83,15 @@ class Scrcpy(ScrcpyCore, Uiautomator2):
         with self._scrcpy_control_socket_lock:
             # Wait new frame
             now = time.time()
-            while 1:
-                time.sleep(0.001)
+            start_time = now
+            while True:
                 if self._scrcpy_stream_loop_thread is None or not self._scrcpy_stream_loop_thread.is_alive():
                     raise ScrcpyError('_scrcpy_stream_loop_thread died')
                 if self._scrcpy_last_frame_time > now:
-                    screenshot = self._scrcpy_last_frame.copy()
-                    return screenshot
+                    return self._scrcpy_last_frame.copy()
+                if time.time() - start_time > 2.0:
+                    raise ScrcpyError('Timeout waiting for scrcpy frame')
+                time.sleep(0.005)
 
     @retry
     def click_scrcpy(self, x, y):
