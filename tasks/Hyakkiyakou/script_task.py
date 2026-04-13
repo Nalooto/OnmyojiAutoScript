@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from numpy import uint8, fromfile
 from random import choice
 from cached_property import cached_property
+from module.base.timer import Timer
 # Use cmd to install: ./toolkit/python.exe -m pip install -i https://pypi.org/simple/ oashya --trusted-host pypi.org
 # update oashya:  ./toolkit/python.exe -m pip install --upgrade oashya
 from oashya.tracker import Tracker
@@ -249,15 +250,19 @@ class ScriptTask(GameUi, HyaSlave, SwitchOnmyoji):
         # 这里改成：在三个候选中选择稀有度最高的作为鬼王
         self._best_boss_button = None
         self._select_best_boss()
-        while 1:
+        boss_selection_timer = Timer(10).start()
+        while self.appear(self.I_HTITLE):
             self.screenshot()
-            if not self.appear(self.I_HTITLE):
-                break
             if self.appear_then_click(self.I_HSTART, interval=2):
                 continue
             if not self.appear(self.I_HSELECTED) and getattr(self, '_best_boss_button', None) is not None:
                 self.click(self._best_boss_button, interval=2)  # 保险：如果因为某些原因还没处于“已选中”状态，就再点一次最佳按钮
                 continue
+            if boss_selection_timer.reached():
+                logger.warning('Boss selection timeout, click start once and proceed')
+                if self.appear(self.I_HSTART):
+                    self.click(self.I_HSTART, interval=0.1)
+                break
         self.device.stuck_record_add('BATTLE_STATUS_S')
         # 正式开始
         logger.hr('Start Hyakkiyakou')

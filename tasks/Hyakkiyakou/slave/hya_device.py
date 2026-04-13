@@ -38,9 +38,13 @@ class HyaDevice(BaseTask):
             if image_black(self.device.image):
                 logger.error('Screenshot image is still black after retry')
                 raise RequestHumanTakeover('Screenshot image is black, try again')
-        if self.hya_fs_check_timer.reached():
+        if hasattr(self, 'I_CHECK_RUN') and self.appear(self.I_CHECK_RUN):
+            self.hya_fs_check_timer.reset()
+        if hasattr(self, 'I_HFREEZE') and self.appear(self.I_HFREEZE):
+            self.hya_fs_check_timer.reset()
+        if self.hya_fs_check_timer.started() and self.hya_fs_check_timer.reached():
             logger.error('Fast screenshot check timer reached')
-            logger.error('Five minutes have not ended, the game is probably stuck, please check the game')
+            logger.error('Three minutes have not ended, the game is probably stuck, please check the game')
             raise GameStuckError
         if self.config.script.error.save_error:
             self.device.screenshot_deque.append({'time': datetime.now(), 'image': self.device.image})
