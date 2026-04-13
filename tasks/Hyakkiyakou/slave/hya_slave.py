@@ -131,49 +131,75 @@ class HyaSlave(HyaDevice, HyaColor, HyakkiyakouAssets):
         logger.warning(f'Cannot predict result, current: {current}')
         return current
 
+    def _with_roi_back(self, target, roi):
+        origin = target.roi_back
+        target.roi_back = roi
+        return origin
+
     def predict_bean(self, current: int):
         possible_beans: list[int] = [current, current - 10, current - 20]
         for bean in possible_beans:
             if bean >= 100:
                 decade = bean // 10 % 10
                 decade_img = self.bean[decade]
-                decade_img.roi_back = self.DECADE0HUNDRED
-                if not self.appear(decade_img):
-                    continue
-                hundred = bean // 100
-                hundred_img = self.bean[hundred]
-                hundred_img.roi_back = self.HUNDRED0HUNDRED
-                if not self.appear(hundred_img):
-                    continue
-                return bean
+                origin_decade = self._with_roi_back(decade_img, self.DECADE0HUNDRED)
+                try:
+                    if not self.appear(decade_img):
+                        continue
+                    hundred = bean // 100
+                    hundred_img = self.bean[hundred]
+                    origin_hundred = self._with_roi_back(hundred_img, self.HUNDRED0HUNDRED)
+                    try:
+                        if not self.appear(hundred_img):
+                            continue
+                        return bean
+                    finally:
+                        hundred_img.roi_back = origin_hundred
+                finally:
+                    decade_img.roi_back = origin_decade
 
             elif bean >= 10:
                 decade = bean // 10
                 decade_img = self.bean[decade]
-                decade_img.roi_back = self.DECADE0DECADE
-                if not self.appear(decade_img):
-                    continue
-                unit = bean % 10
-                unit_img = self.bean[unit]
-                unit_img.roi_back = self.UNIT0DECADE
-                if self.appear(unit_img):
-                    return bean
-                for i in range(10):
-                    unit_img = self.bean[i]
-                    unit_img.roi_back = self.UNIT0DECADE
-                    if self.appear(unit_img):
-                        return max(0, (bean // 10) * 10 + i)
+                origin_decade = self._with_roi_back(decade_img, self.DECADE0DECADE)
+                try:
+                    if not self.appear(decade_img):
+                        continue
+                    unit = bean % 10
+                    unit_img = self.bean[unit]
+                    origin_unit = self._with_roi_back(unit_img, self.UNIT0DECADE)
+                    try:
+                        if self.appear(unit_img):
+                            return bean
+                        for i in range(10):
+                            candidate_img = self.bean[i]
+                            origin_candidate = self._with_roi_back(candidate_img, self.UNIT0DECADE)
+                            try:
+                                if self.appear(candidate_img):
+                                    return max(0, (bean // 10) * 10 + i)
+                            finally:
+                                candidate_img.roi_back = origin_candidate
+                    finally:
+                        unit_img.roi_back = origin_unit
+                finally:
+                    decade_img.roi_back = origin_decade
             else:
                 unit = bean % 10
                 unit_img = self.bean[unit]
-                unit_img.roi_back = self.UNIT0
-                if self.appear(unit_img):
-                    return bean
-                for i in range(10):
-                    unit_img = self.bean[i]
-                    unit_img.roi_back = self.UNIT0
+                origin_unit = self._with_roi_back(unit_img, self.UNIT0)
+                try:
                     if self.appear(unit_img):
-                        return max(0, i)
+                        return bean
+                    for i in range(10):
+                        candidate_img = self.bean[i]
+                        origin_candidate = self._with_roi_back(candidate_img, self.UNIT0)
+                        try:
+                            if self.appear(candidate_img):
+                                return max(0, i)
+                        finally:
+                            candidate_img.roi_back = origin_candidate
+                finally:
+                    unit_img.roi_back = origin_unit
         # 最坏的情况下用ocr
         num = self.O_BEAN_NUMBER.ocr(self.device.image)
         if isinstance(num, int) and num >= 0:
@@ -189,14 +215,19 @@ class HyaSlave(HyaDevice, HyaColor, HyakkiyakouAssets):
         roi = self.buff_state_rois[pos]
         if current is not None and current != HyaBuff.BUFF_STATE0:
             current_image = self.buff_state_images[current]
-            current_image.roi_back = roi
-            if self.appear(current_image):
-                return current
+            origin_current = self._with_roi_back(current_image, roi)
+            try:
+                if self.appear(current_image):
+                    return current
+            finally:
+                current_image.roi_back = origin_current
         for i, img in enumerate(self.buff_state_images):
-            img.roi_back = roi
-            if self.appear(img):
-                # int to HyaBuff
-                return HyaBuff.from_index(i)
+            origin_img = self._with_roi_back(img, roi)
+            try:
+                if self.appear(img):
+                    return HyaBuff.from_index(i)
+            finally:
+                img.roi_back = origin_img
         return HyaBuff.BUFF_STATE0
 
     def recognize_bean_05(self) -> bool:

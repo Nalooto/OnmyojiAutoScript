@@ -33,8 +33,11 @@ class HyaDevice(BaseTask):
         self.hya_screenshot_interval.reset()
         self.device.image = self.device.screenshot_window_background() if screenshot == ScreenshotMethod.WINDOW_BACKGROUND else self.device.screenshot_nemu_ipc()
         if image_black(self.device.image):
-            logger.error('Screenshot image is black, try again')
-            raise RequestHumanTakeover('Screenshot image is black, try again')
+            logger.warning('Screenshot image is black, retrying once')
+            self.device.image = self.device.screenshot_window_background() if screenshot == ScreenshotMethod.WINDOW_BACKGROUND else self.device.screenshot_nemu_ipc()
+            if image_black(self.device.image):
+                logger.error('Screenshot image is still black after retry')
+                raise RequestHumanTakeover('Screenshot image is black, try again')
         if self.hya_fs_check_timer.reached():
             logger.error('Fast screenshot check timer reached')
             logger.error('Five minutes have not ended, the game is probably stuck, please check the game')

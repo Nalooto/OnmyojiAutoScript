@@ -111,7 +111,7 @@ class ScriptTask(GameUi, HyaSlave, SwitchOnmyoji):
         hya_interval = debug_config.hya_interval
         hya_save_result = debug_config.hya_save_result
         if hya_interval <= 100 or hya_interval >= 1000:
-            raise RequestHumanTakeover('screenshot_interval must be between 1000 and 10000')
+            raise RequestHumanTakeover('screenshot_interval must be between 100 and 1000')
         self.set_fast_screenshot_interval(hya_interval)
         return Debugger(info_enable=debug_config.hya_info, 
                         continuous_learning=debug_config.continuous_learning,
@@ -186,7 +186,7 @@ class ScriptTask(GameUi, HyaSlave, SwitchOnmyoji):
         如果没检测到式神，则返回 (-1, -1)
         """
         # 截一张当前图
-        self.screenshot()
+        self.fast_screenshot(screenshot=self._config.debug_config.hya_screenshot_method)
         # 这里 response 随便给一个默认值即可，主线战斗里是 last_action
         tracks = self.tracker(image=self.device.image, response=[0, 0, False, 10])
         best_score = -1
@@ -198,8 +198,8 @@ class ScriptTask(GameUi, HyaSlave, SwitchOnmyoji):
                 best_class = _class
         if best_class != -1:
             logger.info(
-                f'Hyakki select: detect {id2name(_class)} '
-                f'with rarity score {score}'
+                f'Hyakki select: detect {id2name(best_class)} '
+                f'with rarity score {best_score}'
             )
         else:
             logger.warning('Hyakki select: no valid shikigami detected on title screen')
@@ -219,7 +219,7 @@ class ScriptTask(GameUi, HyaSlave, SwitchOnmyoji):
         for idx, btn in enumerate(candidates):
             # 点一下第 idx 个候选，让它成为当前选中的式神
             self.click(btn, interval=0.1)
-            time.sleep(1)  # 给界面一点刷新时间
+            self.fast_screenshot(screenshot=self._config.debug_config.hya_screenshot_method)
             score, cls = self._detect_current_rarity()
             scores.append(score)
             if score > best_score:
@@ -238,13 +238,14 @@ class ScriptTask(GameUi, HyaSlave, SwitchOnmyoji):
 
     def one(self):
         self.reset_state()
-        if not self.appear(self.I_HACCESS):
-            logger.warning('Page Error')
+        if not self.wait_until_appear(self.I_HACCESS, wait_time=5):
+            raise RequestHumanTakeover('Hyakkiyakou access button not found')
         if self._config.hyakkiyakou_config.hya_invite_friend:
             self.invite_friend()
         # start
         self.ui_click(self.I_HACCESS, self.I_HSTART, interval=2)
-        self.wait_until_appear(self.I_HTITLE)
+        if not self.wait_until_appear(self.I_HTITLE, wait_time=5):
+            raise RequestHumanTakeover('Hyakkiyakou title screen not reached')
         # 这里改成：在三个候选中选择稀有度最高的作为鬼王
         self._best_boss_button = None
         self._select_best_boss()
@@ -275,11 +276,10 @@ class ScriptTask(GameUi, HyaSlave, SwitchOnmyoji):
                 init_bean_flag = True
                 self.bean_05to10()
                 time.sleep(0.5)
-            #修改：在这里不再区分freeze，而是将状态传到decision用于执行冻结策略
-            #目前被禁用了 因为冰冻状态下检测正确率约等于0 全是蝉冰雪女 =.=
-            if not self.appear(self.I_HFREEZE):
-                # -------------------------------------------------------
-                freeze = self.appear(self.I_HFREEZE)
+            # 修改：在这里不再区分freeze，而是将状态传到decision用于执行冻结策略
+            # 目前被禁用了 因为冰冻状态下检测正确率约等于0 全是蝉冰雪女 =.=
+            freeze = self.appear(self.I_HFREEZE)
+            if not freeze:
                 self.slave_state = self.update_state()
                 tracks = self.tracker(image=self.device.image, response=last_action)
                 last_action = self.agent.decision(tracks=tracks, state=self.slave_state, freeze=freeze)
