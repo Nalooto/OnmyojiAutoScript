@@ -228,7 +228,8 @@ class CommandBuilder:
             builder.publish(connection)
 
     """
-    DEFAULT_DELAY = 0.05
+    # Shorter default delay improves multi-instance responsiveness while keeping command reliability.
+    DEFAULT_DELAY = 0.03
     max_x = 1280
     max_y = 720
 

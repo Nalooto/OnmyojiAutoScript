@@ -163,7 +163,8 @@ class Screenshot(Adb, DroidCast, Scrcpy, Window, NemuIpc):
                 self.config.script.optimization.screenshot_interval = interval
             # Allow nemu_ipc to have a lower default
             if self.config.Emulator_ScreenshotMethod == 'nemu_ipc':
-                interval = limit_in(origin, 0.1, 0.2)
+                # Nemu IPC is expensive in multi-instance runs, keep interval conservative.
+                interval = limit_in(origin, 0.15, 0.3)
         elif interval == 'combat':
             origin = self.config.script.optimization.combat_screenshot_interval
             interval = limit_in(origin, 0.3, 1.0)

@@ -243,6 +243,8 @@ class NemuIpcImpl:
         self.connect_id: int = 0
         self.width = 0
         self.height = 0
+        self.pixels_length = 0
+        self._pixels_pointer = None
 
     def connect(self):
         if self.connect_id > 0:
@@ -362,22 +364,25 @@ class NemuIpcImpl:
         if self.connect_id == 0:
             self.connect()
 
-        self.get_resolution()
+        if self.width == 0 or self.height == 0:
+            self.get_resolution()
+
+        length = self.width * self.height * 4
+        if self._pixels_pointer is None or self.pixels_length != length:
+            self._pixels_pointer = ctypes.pointer((ctypes.c_ubyte * length)())
+            self.pixels_length = length
 
         width_ptr = ctypes.pointer(ctypes.c_int(self.width))
         height_ptr = ctypes.pointer(ctypes.c_int(self.height))
-        length = self.width * self.height * 4
-        pixels_pointer = ctypes.pointer((ctypes.c_ubyte * length)())
 
         ret = self.ev_run_sync(
             self.lib.nemu_capture_display,
-            self.connect_id, self.display_id, length, width_ptr, height_ptr, pixels_pointer
+            self.connect_id, self.display_id, length, width_ptr, height_ptr, self._pixels_pointer
         )
         if ret > 0:
             raise NemuIpcError('nemu_capture_display failed during screenshot()')
 
-        # image = np.ctypeslib.as_array(pixels_pointer, shape=(self.height, self.width, 4))
-        image = np.ctypeslib.as_array(pixels_pointer.contents).reshape((self.height, self.width, 4))
+        image = np.ctypeslib.as_array(self._pixels_pointer.contents).reshape((self.height, self.width, 4))
         return image
 
     def convert_xy(self, x, y):
@@ -506,9 +511,9 @@ class NemuIpc():
     def screenshot_nemu_ipc(self):
         image = self.nemu_ipc.screenshot()
 
-        image = cv2.cvtColor(image, cv2.COLOR_BGRA2BGR)
-        cv2.flip(image, 0, dst=image)
-        return image
+        # Convert BGRA to BGR and flip the upside-down image in one pass.
+        image = image[..., :3]
+        return np.ascontiguousarray(image[::-1, :, :])
 
     def click_nemu_ipc(self, x, y):
         down = ensure_time((0.010, 0.020))
