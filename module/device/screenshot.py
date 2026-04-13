@@ -181,7 +181,7 @@ class Screenshot(Adb, DroidCast, Scrcpy, Window, NemuIpc):
         # video stream is received continuously no matter you use it or not.
         # if self.config.script.device.screenshot_method == 'scrcpy':
         if self.config.script.device.screenshot_method == 'scrcpy':
-            interval = 0.0
+            interval = 0.03
 
         if interval != self._screenshot_interval.limit:
             logger.info(f'Screenshot interval set to {interval}s')

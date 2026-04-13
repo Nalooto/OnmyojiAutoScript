@@ -33,6 +33,7 @@ class Function:
         输入的是每一个ConfigModel的一个字段对象
         :param data:
         """
+        # 统一提取 scheduler：dict 用 .get()，BaseModel 用 getattr()
         if isinstance(data, dict):
             scheduler = data.get("scheduler")
         elif isinstance(data, BaseModel):
@@ -46,13 +47,20 @@ class Function:
             self.next_run = DEFAULT_TIME
             return
 
-        self.enable: bool = scheduler['enable'] if isinstance(scheduler, dict) else scheduler.enable
+        # 统一按属性访问：dict 先转成命名式访问，BaseModel 直接用属性
+        if isinstance(scheduler, dict):
+            self.enable: bool = scheduler['enable']
+            next_run = scheduler['next_run']
+            priority = scheduler['priority']
+        else:
+            self.enable: bool = scheduler.enable
+            next_run = scheduler.next_run
+            priority = scheduler.priority
+
         self.command: str = ConfigModel.type(key)
-        next_run = scheduler['next_run'] if isinstance(scheduler, dict) else scheduler.next_run
         if isinstance(next_run, str):
             next_run = datetime.strptime(next_run, "%Y-%m-%d %H:%M:%S")
         self.next_run: datetime = next_run
-        priority = scheduler['priority'] if isinstance(scheduler, dict) else scheduler.priority
         if isinstance(priority, str):
             priority = int(priority)
         self.priority: int = priority

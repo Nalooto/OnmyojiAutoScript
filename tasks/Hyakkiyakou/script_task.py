@@ -17,7 +17,7 @@ from oashya.tracker import Tracker
 from oashya.labels import label2id, CLASSINDEX as CI, id2name
 from oashya.utils import draw_tracks
 
-from module.exception import TaskEnd
+from module.exception import TaskEnd, GameStuckError
 from module.logger import logger
 from module.exception import RequestHumanTakeover
 from tasks.Component.SwitchOnmyoji.switch_onmyoji import SwitchOnmyoji
@@ -240,13 +240,13 @@ class ScriptTask(GameUi, HyaSlave, SwitchOnmyoji):
     def one(self):
         self.reset_state()
         if not self.wait_until_appear(self.I_HACCESS, wait_time=5):
-            raise RequestHumanTakeover('Hyakkiyakou access button not found')
+            raise GameStuckError('Hyakkiyakou access button not found')
         if self._config.hyakkiyakou_config.hya_invite_friend:
             self.invite_friend()
         # start
         self.ui_click(self.I_HACCESS, self.I_HSTART, interval=2)
         if not self.wait_until_appear(self.I_HTITLE, wait_time=5):
-            raise RequestHumanTakeover('Hyakkiyakou title screen not reached')
+            raise GameStuckError('Hyakkiyakou title screen not reached')
         # 这里改成：在三个候选中选择稀有度最高的作为鬼王
         self._best_boss_button = None
         self._select_best_boss()

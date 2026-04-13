@@ -271,12 +271,12 @@ class Script:
                 continue
             if key == "restart":
                 continue
-            if getattr(value, 'scheduler', None) is None:
+            scheduler = getattr(value, 'scheduler', None)
+            if scheduler is None:
                 continue
 
-            scheduler = value["scheduler"]
-            item = {"enable": scheduler["enable"],
-                    "next_run": str(scheduler["next_run"])}
+            item = {"enable": scheduler.enable,
+                    "next_run": str(scheduler.next_run)}
             key = self.config.model.type(key)
             result[key] = item
         return json.dumps(result)
@@ -496,6 +496,9 @@ class Script:
             #     del_cached_property(self, 'config')
             #     logger.info('Server or network is recovered. Restart game client')
             #     self.config.task_call('Restart')
+
+            # Reload config at the start of each iteration to pick up external changes
+            self.config.reload()
 
             # Get task
             task = self.get_next_task()

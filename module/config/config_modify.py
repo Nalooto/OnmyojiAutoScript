@@ -81,12 +81,12 @@ class ConfigModify(Config):
                 continue
             if key == "restart":
                 continue
-            if getattr(value, 'scheduler', None) is None:
+            scheduler = getattr(value, 'scheduler', None)
+            if scheduler is None:
                 continue
 
-            scheduler = value["scheduler"]
-            item = {"enable": scheduler["enable"],
-                    "next_run": str(scheduler["next_run"])}
+            item = {"enable": scheduler.enable,
+                    "next_run": str(scheduler.next_run)}
             key = self.config.model.type(key)
             result[key] = item
         return json.dumps(result)

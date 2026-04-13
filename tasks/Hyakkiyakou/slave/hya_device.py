@@ -37,7 +37,7 @@ class HyaDevice(BaseTask):
             self.device.image = self.device.screenshot_window_background() if screenshot == ScreenshotMethod.WINDOW_BACKGROUND else self.device.screenshot_nemu_ipc()
             if image_black(self.device.image):
                 logger.error('Screenshot image is still black after retry')
-                raise RequestHumanTakeover('Screenshot image is black, try again')
+                raise RequestHumanTakeover('Screenshot image is still black after retry')
         if hasattr(self, 'I_CHECK_RUN') and self.appear(self.I_CHECK_RUN):
             self.hya_fs_check_timer.reset()
         if hasattr(self, 'I_HFREEZE') and self.appear(self.I_HFREEZE):
