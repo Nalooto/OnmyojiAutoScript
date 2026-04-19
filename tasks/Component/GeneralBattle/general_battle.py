@@ -584,13 +584,20 @@ class GeneralBattle(GeneralBuff, GeneralBattleAssets):
             self.screenshot()
         if not self.appear(self.I_EXIT):
             return False
+        timeout = Timer(5).start()
         while True:
             self.screenshot()
-            if not self.is_in_real_battle(False):
-                return True
-            if self.appear_then_click(self.I_EXIT_ENSURE, interval=0.5):
+            if timeout.reached():
+                logger.info('Exit battle success')
+                break
+            if GameUi.get_current_page(self) == page_battle_result:
+                logger.info('Exit battle success')
+                break
+            if self.appear_then_click(self.I_EXIT_ENSURE, interval=1):
+                timeout.reset()
                 continue
-            if self.appear_then_click(self.I_EXIT, interval=1.5):
+            if self.appear_then_click(self.I_EXIT, interval=4):
+                timeout.reset()
                 continue
         return True
 
