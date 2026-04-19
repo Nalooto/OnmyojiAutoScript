@@ -168,9 +168,13 @@ class OcrRuntime:
     @staticmethod
     def _decode_image(image_bytes: bytes) -> np.ndarray:
         image = pickle.loads(image_bytes)
-        if not isinstance(image, np.ndarray):
-            raise TypeError("OCR payload must be numpy.ndarray")
-        return image
+        if isinstance(image, np.ndarray):
+            return image
+        if isinstance(image, tuple):
+            shape, dtype_str, data = image
+            if isinstance(data, (bytes, bytearray)):
+                return np.frombuffer(data, dtype=np.dtype(dtype_str)).reshape(shape)
+        raise TypeError("OCR payload must be numpy.ndarray")
 
     @staticmethod
     def _rotate_vertical(image: np.ndarray) -> np.ndarray:
