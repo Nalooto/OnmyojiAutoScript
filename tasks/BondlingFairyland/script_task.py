@@ -14,8 +14,7 @@ from module.logger import logger
 from tasks.BondlingFairyland.assets import BondlingFairylandAssets
 from tasks.BondlingFairyland.config import BondlingMode, BondlingClass, BondlingSwitchSoul, BondlingConfig, UserStatus
 from tasks.Component.GeneralBattle.config_general_battle import GeneralBattleConfig
-from tasks.Component.GeneralBattle.general_battle import GeneralBattle, BattleRuntime, OnceFlags, BattleAction
-from tasks.Component.GeneralBuff.config_buff import BuffClass
+from tasks.Component.GeneralBattle.general_battle import BattleAction, BattleContext, ExitMatcher, GeneralBattle
 from tasks.Component.GeneralInvite.general_invite import GeneralInvite
 from tasks.Component.GeneralRoom.general_room import GeneralRoom
 from tasks.Component.SwitchSoul.switch_soul import SwitchSoul, switch_parser
@@ -23,7 +22,6 @@ from tasks.GameUi.default_pages import page_battle_result, random_click
 from tasks.GameUi.game_ui import GameUi
 from tasks.GameUi.matcher import any_of
 from tasks.GameUi.page import page_main, page_bondling_fairyland, page_shikigami_records, page_mall
-from typing import Union
 
 
 class BondlingNumberMax(Exception):
@@ -35,19 +33,22 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
     ball_pos_list = [None, None, None, None, None]  # 用于记录每一个位置的球是否出现
     first_catch = True  # 用于记录是否是第一次捕捉
 
+    def _exit_matcher(self) -> ExitMatcher | None:
+        return any_of()
+
     def _register_custom_pages(self) -> None:
         page_result = self.navigator.resolve_page(page_battle_result)
         if page_result is None:
             return
         logger.info('Update page_battle_result')
         page_result.recognizer = any_of(self.I_BATTLE_FAIL_ABANDON, self.I_CAP_AGAIN, self.I_CAP_SUCCESS,
-                                        self.I_CAP_FAILURE, self.I_BATTLE_FAIL, self.I_BATTLE_SUCCESS)
+                                        self.I_CAP_FAILURE, self.I_BATTLE_FAIL, self.I_BATTLE_SUCCESS,
+                                        page_result.recognizer)
         # 契灵结算弹窗会叠在战斗页面上，需要更高优先级避免被底层战斗页抢先识别。
         page_result.priority = 50
 
-    def _handle_result(self, runtime: BattleRuntime, once: OnceFlags, cfg: GeneralBattleConfig,
-                       buff: Union[BuffClass | list[BuffClass] | None]) -> BattleAction:
-        runtime.reward_no_battle_ts = None
+    def _handle_result(self, context: BattleContext, cfg: GeneralBattleConfig) -> BattleAction:
+        context.reward_no_battle_ts = None
         bondling_mode = self.config.bondling_fairyland.bondling_config.bondling_mode
         cap_again = bondling_mode in [BondlingMode.MODE3, BondlingMode.MODE4]
         if cap_again:
@@ -56,12 +57,16 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
             self.device.click_record_clear()
         else:
             self.appear_then_click(self.I_BATTLE_FAIL_ABANDON, interval=1)
-        runtime.is_win = self.appear(self.I_CAP_SUCCESS) or self.appear(self.I_BATTLE_SUCCESS)
-        if runtime.is_win:
-            self.appear_then_click(self.I_CAP_SUCCESS, action=random_click(), interval=0.5)
-            self.appear_then_click(self.I_BATTLE_SUCCESS, interval=0.5)
+        context.is_win = self.appear(self.I_CAP_SUCCESS) or self.appear(self.I_BATTLE_SUCCESS)
+        if context.is_win:
+            if self.appear_then_click(self.I_CAP_SUCCESS, action=random_click(), interval=0.5) or \
+                    self.appear_then_click(self.I_BATTLE_SUCCESS, interval=0.5) or \
+                    self.appear_then_click(self.I_WIN, action=random_click(), interval=0.5):
+                pass
         else:
-            self.appear_then_click(self.I_CAP_FAILURE, action=random_click(), interval=0.5)
+            if self.appear_then_click(self.I_CAP_FAILURE, action=random_click(), interval=0.5) or \
+                    self.appear_then_click(self.I_FALSE, action=random_click(), interval=0.5):
+                pass
         return BattleAction.CONTINUE
 
     def run(self):
@@ -645,7 +650,8 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
             self.screenshot()
 
             # 如果自己在探索界面或者是庭院，那就是房间已经被销毁了
-            if self.appear(self.I_GI_HOME) or self.appear(self.I_GI_EXPLORE) or self.appear(self.I_BALL_AREA) or self.appear(self.I_BALL_HELP):
+            if self.appear(self.I_GI_HOME) or self.appear(self.I_GI_EXPLORE) or self.appear(
+                    self.I_BALL_AREA) or self.appear(self.I_BALL_HELP):
                 logger.warning('Room destroyed')
                 success = False
                 break

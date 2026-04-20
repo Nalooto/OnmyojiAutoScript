@@ -4,18 +4,16 @@
 
 import zerorpc
 import zmq
-import msgpack
-import random
 import re
 import cv2
 import time
 import os
 import inflection
-import asyncio
 import json
 
 from datetime import date
 import threading
+from module.device.device import Device
 from typing import Any, Callable
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -23,12 +21,8 @@ from cached_property import cached_property
 from pydantic import BaseModel, ValidationError
 from threading import Thread
 from multiprocessing.queues import Queue
-
-
 from module.config.utils import convert_to_underscore
 from module.config.config import Config
-from module.config.config_model import ConfigModel
-from module.device.device import Device
 from module.device.env import IS_WINDOWS
 from module.base.utils import load_module
 from module.base.decorator import del_cached_property
@@ -37,8 +31,7 @@ from module.exception import *
 from module.server.i18n import I18n
 from module.image.rpc import ensure_image_server_ready
 from module.ocr.rpc import ensure_ocr_server_ready
-
-
+from module.script import ScriptRuntimeController
 
 _log_switch_lock = threading.Lock()#线程锁
 
@@ -48,6 +41,8 @@ class Script:
         logger.hr('Start', level=0)
         self.server = None
         self.state_queue: Queue = None
+        self._emulator_down = False
+        self.runtime = ScriptRuntimeController(self)
         self.gui_update_task: Callable = None  # 回调函数, gui进程注册当每次config更新任务的时候更新gui的信息
         self.config_name = config_name
         # Skip first restart
@@ -75,7 +70,7 @@ class Script:
             exit(1)
 
     @cached_property
-    def device(self) -> "Device":
+    def device(self) -> Device | None:
         try:
             from module.device.device import Device
             device = Device(config=self.config)
@@ -325,48 +320,9 @@ class Script:
             if task.next_run <= now:
                 return task.command
             # 根据策略执行等待逻辑
-            if not self._handle_wait_during_idle(task.next_run):
+            if not self.runtime.handle_wait_during_idle(task.next_run):
                 # 若等待被打断, 则刷新配置
-                if self.stop_event.is_set():
-                    return None
-                self.config.reload()
-
-    def _handle_wait_during_idle(self, next_run: datetime) -> bool:
-        """
-        处理任务空闲期间的行为策略
-        :param next_run: 下一个任务的时间
-        :return: True 表示等待成功完成, False 表示等待被中断
-        """
-        method = self.config.script.optimization.when_task_queue_empty
-        strategy_map = {
-            "close_game": self._wait_close_game,
-            "goto_main": self._wait_goto_main,
-        }
-        func = strategy_map.get(method)
-        if not func:
-            logger.warning(f"Invalid Optimization_WhenTaskQueueEmpty: {method}, fallback to stay_there")
-            func = self._wait_stay_there
-        return func(next_run)
-
-    def _wait_close_game(self, next_run: datetime) -> bool:
-        logger.info("Close game during wait")
-        self.device.app_stop()
-        self.device.release_during_wait()
-        if not self.wait_until(next_run):
-            return False
-        self.run("Restart")
-        return True
-
-    def _wait_goto_main(self, next_run: datetime) -> bool:
-        logger.info("Goto main page during wait")
-        self.run("GotoMain")
-        self.device.release_during_wait()
-        return self.wait_until(next_run)
-
-    def _wait_stay_there(self, next_run: datetime) -> bool:
-        logger.info("Stay_there (no action) during wait")
-        self.device.release_during_wait()
-        return self.wait_until(next_run)
+                del_cached_property(self, "config")
 
     def exception_handler(self, e: Exception, command: str) -> None:
         # 处理御魂溢出
@@ -503,16 +459,14 @@ class Script:
 
             # Get task
             task = self.get_next_task()
-            if task is None:
-                logger.info(f"Scheduler loop stopping: {self.config_name}")
-                break
-            _ = self.device
             # Skip first restart
             if self.is_first_task and task == 'Restart':
                 logger.info('Skip task `Restart` at scheduler start')
                 self.config.task_delay(task='Restart', success=True, server=True)
                 self.config.reload()
                 continue
+
+            self.runtime.prepare_task_execution(task)
 
             # Run
             logger.info(f'Scheduler: Start task `{task}`')
