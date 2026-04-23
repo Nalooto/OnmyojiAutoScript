@@ -30,6 +30,7 @@ from tasks.GameUi.page_definition import Page
 # 战斗结束后用于确认“已经回到任务自身页面”的识别条件。
 # 推荐优先复用调用方战后原本就会 `wait_until_appear(...)` 的稳定特征。
 ExitMatcher = Union[Matcher | RecognizerLike | Page]
+BattleInspectionAction = Callable[["BattleContext"], None]
 
 
 @dataclass
@@ -38,6 +39,50 @@ class BattleBehaviorState:
 
     # 已执行行为名集合；共享状态与调用级状态都通过该集合判断是否需要再次执行。
     done: set[str] = field(default_factory=set)
+
+
+@dataclass
+class BattleTimedInspection:
+    """声明 battle 阶段的一个具名定时巡检项。"""
+
+    # 巡检项稳定标识；用于运行时 timer 容器索引。
+    name: str
+    # 巡检触发间隔，单位秒。
+    interval: float
+    # 巡检到期后的执行动作。
+    action: BattleInspectionAction
+    # 巡检项自己的运行时 timer；仅在进入 `page_battle` 后才会启动。
+    timer: Timer = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        """初始化巡检项自身的 timer。"""
+
+        if self.interval <= 0:
+            raise ValueError(f"Timed battle inspection interval must be > 0: {self.name}")
+        self.timer = Timer(self.interval)
+
+    def arm(self) -> None:
+        """在进入新的 battle 窗口时启动或重置 timer。"""
+
+        if self.timer.started():
+            self.timer.reset()
+            return
+        self.timer.start()
+
+    def tick(self, context: "BattleContext") -> bool:
+        """推进一次巡检项计时，命中时执行动作。
+
+        Returns:
+            bool: 本轮是否实际触发了巡检动作。
+        """
+
+        if not self.timer.started():
+            self.timer.start()
+            return False
+        if not self.timer.reached_and_reset():
+            return False
+        self.action(context)
+        return True
 
 
 @dataclass
@@ -54,8 +99,12 @@ class BattleContext:
     shared_behavior_state: BattleBehaviorState
     # 当前 `run_general_battle()` 调用级的一次性行为状态。
     call_behavior_state: BattleBehaviorState
+    # 当前调用内本轮连战的一次性行为状态；进入下一轮时重置。
+    round_behavior_state: BattleBehaviorState
     # 当前调用各行为默认使用的作用域映射。
     behavior_scopes: dict[str, "BattleBehaviorScope"]
+    # 当前调用 battle 阶段生效的具名定时巡检项。
+    timed_battle_inspections: dict[str, BattleTimedInspection]
     # 当前调用需要开启的 buff 配置；供 handler 和子类覆写逻辑直接读取。
     buff: Union[BuffClass | list[BuffClass] | None] = None
     # 最近一次稳定识别到的战斗页面；用于驱动连战和超时逻辑。
@@ -77,6 +126,8 @@ class BattleBehaviorScope(str, Enum):
     BATTLE_KEY = "battle_key"
     # 单次 `run_general_battle()` 调用中只执行一次；连战会继续复用该状态。
     CALL = "call"
+    # 单次 `run_general_battle()` 调用内每一轮连战各执行一次。
+    ROUND = "round"
 
 
 class BattleAction(str, Enum):
@@ -252,7 +303,9 @@ class GeneralBattle(GeneralBuff, GeneralBattleAssets):
             battle_key=battle_key,
             shared_behavior_state=self._battle_shared_state.setdefault(battle_key, BattleBehaviorState()),
             call_behavior_state=BattleBehaviorState(),
+            round_behavior_state=BattleBehaviorState(),
             behavior_scopes=self._get_battle_behavior_scopes(config, battle_key),
+            timed_battle_inspections=self._build_timed_battle_inspections(config, battle_key),
             buff=buff,
             quick_exit=bool(config.quick_exit),
         )
@@ -275,6 +328,56 @@ class GeneralBattle(GeneralBuff, GeneralBattleAssets):
             "buff": BattleBehaviorScope.BATTLE_KEY,
             "green": BattleBehaviorScope.CALL,
         }
+
+    def _get_timed_battle_inspections(self, config: GeneralBattleConfig, battle_key: str) -> tuple[BattleTimedInspection, ...]:
+        """返回当前 battle 生效的定时巡检项集合。
+
+        子任务可覆写此方法，为特定 `battle_key` 追加更多具名巡检项。
+
+        Args:
+            config: 当前通用战斗配置。
+            battle_key: 当前战斗类型分组键。
+
+        Returns:
+            tuple[BattleTimedInspection, ...]: 当前 battle 生效的巡检项集合。
+        """
+
+        return (
+            BattleTimedInspection(
+                name="recover_auto_mode",
+                interval=60,
+                action=self._inspection_recover_auto_mode,
+            ),
+        )
+
+    def _build_timed_battle_inspections(
+        self,
+        config: GeneralBattleConfig,
+        battle_key: str,
+    ) -> dict[str, BattleTimedInspection]:
+        """构建当前 battle 使用的具名巡检项索引。
+
+        Args:
+            config: 当前通用战斗配置。
+            battle_key: 当前战斗类型分组键。
+
+        Returns:
+            dict[str, BattleTimedInspection]: 以巡检项名称为键的声明映射。
+
+        Raises:
+            ValueError: 巡检项名称重复或间隔非法。
+        """
+
+        inspections: dict[str, BattleTimedInspection] = {}
+        for inspection_decl in self._get_timed_battle_inspections(config, battle_key):
+            if inspection_decl.name in inspections:
+                raise ValueError(f"Duplicate timed battle inspection name: {inspection_decl.name}")
+            inspections[inspection_decl.name] = BattleTimedInspection(
+                name=inspection_decl.name,
+                interval=inspection_decl.interval,
+                action=inspection_decl.action,
+            )
+        return inspections
 
     def _get_battle_context(self) -> BattleContext:
         """返回当前通用战斗调用的战斗上下文。
@@ -316,6 +419,8 @@ class GeneralBattle(GeneralBuff, GeneralBattleAssets):
         context = self._get_battle_context()
         if scope == BattleBehaviorScope.BATTLE_KEY:
             return context.shared_behavior_state
+        if scope == BattleBehaviorScope.ROUND:
+            return context.round_behavior_state
         return context.call_behavior_state
 
     def _run_battle_behavior_once(self, behavior_name: str, action: Callable[[], None]) -> bool:
@@ -366,6 +471,32 @@ class GeneralBattle(GeneralBuff, GeneralBattleAssets):
         context.reward_no_battle_ts = None
         context.quick_exit = bool(config.quick_exit)
         context.continuous_count = continuous_count
+        context.round_behavior_state = BattleBehaviorState()
+
+    def _reset_timed_battle_inspection_timers(self, context: BattleContext) -> None:
+        """统一重置当前 battle 生效巡检项的 timer。"""
+
+        for inspection in context.timed_battle_inspections.values():
+            inspection.arm()
+
+    def _tick_timed_battle_inspections(self, context: BattleContext) -> None:
+        """推进当前 battle 的定时巡检项。"""
+
+        for inspection in context.timed_battle_inspections.values():
+            inspection.tick(context)
+
+    def _inspection_recover_auto_mode(self, context: BattleContext) -> None:
+        """默认 battle 巡检项：检测手动并恢复自动。"""
+
+        hand_marker = getattr(self, "O_BATTLE_HAND", None)
+        auto_marker = getattr(self, "O_BATTLE_AUTO", None)
+        if hand_marker is None or auto_marker is None:
+            return
+        if not self.appear(hand_marker):
+            return
+
+        logger.info("Timed inspection hit: recover battle auto mode")
+        self.ui_click(hand_marker, auto_marker, interval=0.8)
 
     def _tick_long_battle(self, context: BattleContext) -> None:
         """按固定周期刷新长战斗卡死保护标记。
@@ -435,12 +566,12 @@ class GeneralBattle(GeneralBuff, GeneralBattleAssets):
         Returns:
             BattleAction: 当前轮准备页处理后的动作决策。
         """
-        if context.last_page in {page_battle_result, page_reward}:
+        if context.last_page in {page_battle, page_battle_result, page_reward}:
+            if not config.continuous_battle:
+                return BattleAction.EXIT_WIN if context.is_win else BattleAction.EXIT_LOSE
             action = self._handle_continuous_prepare(context, config)
             if action != BattleAction.CONTINUE:
                 return action
-            if not config.continuous_battle:
-                return BattleAction.EXIT_WIN if context.is_win else BattleAction.EXIT_LOSE
 
         if self.appear_then_click(self.I_DISABLE_7DAYS_DIFF_SOUL, interval=0.6):
             return BattleAction.CONTINUE
@@ -471,6 +602,9 @@ class GeneralBattle(GeneralBuff, GeneralBattleAssets):
         """
         if context.quick_exit:
             return BattleAction.QUICK_EXIT
+        if context.last_page != page_battle:
+            self._reset_timed_battle_inspection_timers(context)
+        self._tick_timed_battle_inspections(context)
         self._run_battle_behavior_once(
             behavior_name="green",
             action=lambda: self.green_mark(config.green_enable, config.green_mark,
@@ -493,7 +627,8 @@ class GeneralBattle(GeneralBuff, GeneralBattleAssets):
         context.reward_no_battle_ts = None
         context.is_win = not self.appear(self.I_FALSE, threshold=0.8)
         logger.info(f"Battle result is {'win' if context.is_win else 'false'}")
-        self.click(random_click(), interval=1.2)
+        self.click(random_click(), interval=0.8)
+        self.device.click_record_clear()
         return BattleAction.CONTINUE
 
     def _handle_reward(self, context: BattleContext, config: GeneralBattleConfig) -> BattleAction:
@@ -507,7 +642,10 @@ class GeneralBattle(GeneralBuff, GeneralBattleAssets):
             BattleAction: 当前轮奖励页处理后的动作决策。
         """
         context.reward_no_battle_ts = None
-        self.click(random_click(), interval=1.2)
+        # TODO: 部分副本奖励界面不一定是战斗成功, 需要重写
+        context.is_win = True
+        self.click(random_click(), interval=0.8)
+        self.device.click_record_clear()
         return BattleAction.CONTINUE
 
     def _handle_missing_battle_page(self, context: BattleContext, config: GeneralBattleConfig,
@@ -550,11 +688,12 @@ class GeneralBattle(GeneralBuff, GeneralBattleAssets):
         Returns:
             BattleAction: 连战继续、按结果退出等动作决策。
         """
-        if not config.continuous_battle or context.last_page not in {page_battle_result, page_reward}:
-            return BattleAction.CONTINUE
         if 0 < config.max_continuous <= context.continuous_count:
             return BattleAction.EXIT_WIN if context.is_win else BattleAction.EXIT_LOSE
+        logger.hr("General battle start", 2)
         next_count = context.continuous_count + 1
+        self.current_count += 1
+        logger.info(f"Current count: {self.current_count}")
         logger.info(f"Continue battle round: {next_count}")
         self._reset_round_context(context, config, continuous_count=next_count)
         return BattleAction.CONTINUE
@@ -569,10 +708,13 @@ class GeneralBattle(GeneralBuff, GeneralBattleAssets):
             bool | None: `True/False` 表示战斗结束结果，`None` 表示继续主循环。
         """
         if action == BattleAction.EXIT_WIN:
+            logger.info("Battle result: Win")
             return True
         if action == BattleAction.EXIT_LOSE:
+            logger.info("Battle result: Lose")
             return False
         if action == BattleAction.QUICK_EXIT:
+            self.device.screenshot_interval_set()
             self.exit_battle()
         return None
 
@@ -659,8 +801,15 @@ class GeneralBattle(GeneralBuff, GeneralBattleAssets):
             self.screenshot()
         if not self.appear(self.I_EXIT):
             return False
-        self.ui_click(self.I_EXIT, self.I_EXIT_ENSURE, interval=10)
-        self.ui_click_until_disappear(self.I_EXIT_ENSURE, interval=1)
+        self.ui_click(self.I_EXIT, self.I_EXIT_ENSURE, interval=1.5)
+        while True:
+            self.screenshot()
+            if self.appear_then_click(self.I_EXIT_ENSURE, interval=1.5):
+                continue
+            if self.appear_then_click(self.I_FALSE, interval=1.5):
+                continue
+            if not self.appear(self.I_EXIT):
+                break
         logger.info('Exit battle success')
         return True
 
@@ -683,11 +832,13 @@ class GeneralBattle(GeneralBuff, GeneralBattleAssets):
         if not enable:
             return
         logger.info("Green is enable")
+        self.device.screenshot_interval_set()
         match green_mark_type:
             case GreenMarkEnum.CHOOSE:
                 self.green_mark_choose(mark_mode)
             case GreenMarkEnum.NAME:
                 self.green_mark_name(green_mark_name)
+        self.device.screenshot_interval_set('combat')
 
     def green_mark_choose(self, mark_mode: GreenMarkType = GreenMarkType.GREEN_MAIN):
         x, y = None, None
