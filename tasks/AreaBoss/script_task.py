@@ -135,21 +135,33 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, AreaBossAssets):
             return True
 
         if ultra:
+<<<<<<< ours
             if not self.get_difficulty():
                 # 判断是否能切换到极地鬼
                 if self.appear(self.I_AB_DIFFICULTY_NORMAL):
                     self.switch_difficulty(True)
                 elif self.config.area_boss.boss.Attack_60:
+=======
+            if not self.get_difficulty():  # 在普界面
+                # 出现了极, 则直接切换到极地鬼
+                if self.appear(self.I_AB_DIFFICULTY_NORMAL):
+                    self.switch_difficulty(True)
+                elif self.config.area_boss.boss.Attack_60:  # 没有出现极则一次没打过, 拉到60级再打
+>>>>>>> theirs
                     self.switch_to_level_60()
-                    if not self.start_fight():
+                    if not self.start_fight():  # 60级没打过退出吧
                         logger.warning("you are so weakness!")
                         self.wait_until_appear(self.I_AB_CLOSE_RED)
                         self.ui_click_until_disappear(self.I_AB_CLOSE_RED, interval=3)
                         return False
-                else:
+                    self.switch_difficulty(True)  # 打过了切换到极
+                else:  # 普通地鬼且没有开启打60级
                     self.ui_click_until_disappear(self.I_AB_CLOSE_RED, interval=3)
                     return False
+<<<<<<< ours
             self.switch_difficulty(True)
+=======
+>>>>>>> theirs
 
             # 调整悬赏层数
             match reward_floor:
@@ -255,7 +267,6 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, AreaBossAssets):
         logger.info("Swipe to top")
         for i in range(random.randint(1, 3)):
             self.swipe(self.S_AB_FILTER_DOWN)
-        self.screenshot()
         # 遍历所有boss找到名称一致的即目前挑战人数最多的
         for PHOTO in BOSS_REWARD_PHOTO1:
             self.open_filter()
@@ -264,11 +275,9 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, AreaBossAssets):
                 return self.boss_fight(PHOTO, True, fileter_open=False)
             self.ui_click_until_disappear(self.I_AB_CLOSE_RED)
         # 倒数一和二
-        for i in range(random.randint(1, 3)):
-            self.swipe(self.S_AB_FILTER_UP)
-        self.screenshot()
         for PHOTO in BOSS_REWARD_PHOTO2:
             self.open_filter()
+            self.swipe(self.S_AB_FILTER_UP)
             name = self.get_bossName(PHOTO)
             if self.check_common_chars(str(name), boss_name):
                 return self.boss_fight(PHOTO, True, fileter_open=False)
