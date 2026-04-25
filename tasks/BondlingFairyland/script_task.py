@@ -63,6 +63,13 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
             self.click(random_click(), interval=1.2)
         return BattleAction.CONTINUE
 
+    def _handle_reward(self, context: BattleContext, config: GeneralBattleConfig) -> BattleAction:
+        is_win = context.is_win
+        # 抓捕成功才算成功, 奖励不算成功
+        ret = super()._handle_reward(context, config)
+        context.is_win = is_win
+        return ret
+
     def run(self):
         cong = self.config.bondling_fairyland
 
@@ -131,10 +138,10 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
                         logger.error(
                             'You might need to check your bondling number. It most possibly arrived to the max 500')
                         raise BondlingNumberMax
+                    if self.check_and_invite(True):
+                        continue
                     # 某些活动的时候出现 “选择共鸣的阴阳师”
                     if self.appear_then_click(self.I_UI_CONFIRM, interval=1):
-                        continue
-                    if self.check_and_invite(True):
                         continue
                     if self.appear(self.I_CREATE_TEAM, interval=1):
                         self.ensure_private()
@@ -166,7 +173,7 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
             if self.current_count >= self.limit_count:
                 if self.appear(self.I_GI_IN_ROOM):
                     # 次数达到也要邀请好友进房间,然后退出,不然队员无法判断是否完成契灵,出现异常
-                    self.run_invite(config=self.config.bondling_fairyland.invite_config, is_first=is_first)
+                    self.invite_friends(self.config.bondling_fairyland.invite_config)
                     # 等待三秒让队员进房间,避免队员没进房间出现异常
                     sleep(3)
                     logger.info(f'契灵次数:{self.current_count}已完成,退出')
@@ -182,6 +189,7 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
                 if not is_first:
                     if self.run_invite(config=self.config.bondling_fairyland.invite_config):
                         success = self.run_general_battle(self.config.bondling_fairyland.battle_config)
+                        is_first = False
                     else:
                         # 邀请失败，退出任务
                         logger.warning('Invite failed and exit this bondling_fairyland task')
@@ -189,8 +197,8 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
                         break
 
                 # 第一次会邀请队友
-                if is_first:
-                    if not self.run_invite(config=self.config.bondling_fairyland.invite_config, is_first=True):
+                elif is_first:
+                    if not self.run_invite(config=self.config.bondling_fairyland.invite_config, is_first=is_first):
                         logger.warning('Invite failed and exit this bondling_fairyland task')
                         success = False
                         break
