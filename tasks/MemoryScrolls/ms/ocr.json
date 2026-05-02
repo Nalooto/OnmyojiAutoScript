@@ -1,0 +1,11 @@
+[
+  {
+    "itemName": "m_scroll_progress",
+    "roiFront": "401,591,89,27",
+    "roiBack": "401,591,89,27",
+    "mode": "Single",
+    "method": "Default",
+    "keyword": "",
+    "description": "识别当前绘卷进度"
+  }
+]

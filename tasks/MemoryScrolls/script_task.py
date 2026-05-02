@@ -3,6 +3,8 @@
 # github https://github.com/ghg11
 from time import sleep
 from enum import Enum
+import re
+from module.atom.ocr import RuleOcr
 from module.logger import logger
 from module.exception import TaskEnd
 from module.base.timer import Timer
@@ -101,9 +103,11 @@ class ScriptTask(GameUi, MemoryScrollsAssets):
                     raise TaskEnd
         
         # 到达指定进度时进行通知提示
-        if con.notification_95 and not self.appear(self.I_MS_COMPLETE_95):
-            logger.info('Memory Scrolls progress reached 95%, sending notification')
-            self.config.notifier.push(title='追忆绘卷进度95%', content='绘卷进度已达95%，请立即空降')
+        if con.notification_95:
+            progress = self.get_memory_scroll_progress()
+            if progress is not None and progress >= 95:
+                logger.info(f'Memory Scrolls progress reached {progress:.2f}%, sending notification')
+                self.config.notifier.push(title='追忆绘卷进度95%', content=f'绘卷进度已达{progress:.2f}%，请立即空降')
 
         # 判断是否需要捐献碎片
         if self.appear(self.I_MS_CONTRIBUTE) or not self.appear(self.I_MS_COMPLETE):
@@ -150,6 +154,56 @@ class ScriptTask(GameUi, MemoryScrollsAssets):
                         self.click(self.C_MS_CONTRIBUTED, interval=1)
                     else:
                         break
+
+    def get_memory_scroll_progress(self) -> float | None:
+        """
+        使用 OCR 识别当前绘卷进度，并返回百分比。
+        """
+        self.screenshot()
+        ocr_target = getattr(self, 'O_M_SCROLL_PROGRESS', None)
+        if ocr_target is None:
+            try:
+                from tasks.MemoryScrolls.assets import MemoryScrollsAssets
+                ocr_target = getattr(MemoryScrollsAssets, 'O_M_SCROLL_PROGRESS', None)
+            except Exception as e:
+                logger.warning(f'Failed to import MemoryScrollsAssets for OCR progress: {e}')
+
+        if ocr_target is None:
+            logger.warning('Memory Scrolls OCR asset O_M_SCROLL_PROGRESS is missing, using inline fallback')
+            ocr_target = RuleOcr(
+                roi=(401,591,89,27),
+                area=(401,591,89,27),
+                mode='Single',
+                method='Default',
+                keyword='',
+                name='m_scroll_progress',
+            )
+
+        result = ocr_target.ocr(self.device.image)
+        if not result:
+            logger.warning('Memory Scrolls OCR progress not recognized')
+            return None
+
+        progress = self.parse_scroll_progress(result)
+        if progress is None:
+            logger.warning(f'Memory Scrolls OCR returned unexpected text: "{result}"')
+            return None
+
+        logger.info(f'Memory Scrolls OCR progress recognized: "{result}" -> {progress:.2f}%')
+        return progress
+
+    @staticmethod
+    def parse_scroll_progress(text: str) -> float | None:
+        if not text:
+            return None
+        match = re.search(r'([0-9]+(?:\.[0-9]+)?)', text)
+        if not match:
+            return None
+        try:
+            progress = float(match.group(1))
+        except ValueError:
+            return None
+        return min(max(progress, 0.0), 100.0)
     
 
 
