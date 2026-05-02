@@ -61,6 +61,35 @@ class BaseExploration(GameUi, GeneralBattle, GeneralRoom, GeneralInvite, Replace
         if not reuse_screenshot:
             self.screenshot()
 
+        # 批量预取：将场景判断及后续分支中涉及的全部 RuleImage 一次批量匹配，避免逐帧重复执行 matchTemplate
+        # 后续 self.appear() 命中 image_batch_cache 后直接返回，不再重复匹配
+        self.prepare_appear_cache([
+            # WORLD
+            self.I_CHECK_EXPLORATION, self.I_E_SETTINGS_BUTTON,
+            # ENTRANCE
+            self.I_UI_BACK_RED, self.I_E_EXPLORATION_CLICK,
+            # MAIN
+            self.I_E_AUTO_ROTATE_ON, self.I_E_AUTO_ROTATE_OFF,
+            # TEAM
+            self.I_CREATE_ENSURE, self.I_GI_EMOJI_1, self.I_GI_EMOJI_2,
+            # BATTLE_PREPARE (GeneralBattle)
+            self.I_BUFF, self.I_PREPARE_HIGHLIGHT, self.I_PREPARE_DARK,
+            self.I_PRESET, self.I_PRESET_WIT_NUMBER,
+            # BATTLE_FIGHTING (GeneralBattle)
+            self.I_BATTLE_INFO, self.I_FRIENDS, self.I_WIN,
+            self.I_DE_WIN, self.I_FALSE, self.I_REWARD, self.I_REWARD_GOLD,
+            # Scene 分支内常用 target（同一帧内复用，避免二次全屏扫描）
+            self.I_BATTLE_REWARD,   # 小纸人奖励 - roi_back 全屏，开销大
+            self.I_TEAM_EMOJI,      # 队伍表情标志 - MAIN 分支每轮必查
+            self.I_BOSS_BATTLE_BUTTON,  # Boss 按钮 - roi_back 全屏，开销大
+            self.I_TREASURE_BOX_CLICK,  # 宝箱 - 大 roi_back
+            self.I_NORMAL_BATTLE_BUTTON,  # 普通战斗按钮 - roi_back 全屏，开销大
+            # UP 类型匹配 - 使用 Sift Flann 特征匹配，roi_back 覆盖半屏，开销极大
+            self.I_UP_EXP,
+            self.I_UP_COIN,
+            self.I_UP_DARUMA,
+        ])
+
         if self.appear(self.I_CHECK_EXPLORATION) and not self.appear(self.I_E_SETTINGS_BUTTON):
             return Scene.WORLD
         elif self.appear(self.I_UI_BACK_RED) and self.appear(self.I_E_EXPLORATION_CLICK):

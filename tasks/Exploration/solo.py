@@ -6,7 +6,7 @@ from module.logger import logger
 from module.base.timer import Timer
 
 from tasks.Exploration.base import BaseExploration, Scene
-from tasks.Exploration.config import AutoRotate, UserStatus, ExplorationLevel
+from tasks.Exploration.config import AutoRotate, UserStatus, ExplorationLevel, UpType
 import tasks.Exploration.page as pages
 
 
@@ -71,7 +71,9 @@ class SoloExploration(BaseExploration):
                             logger.info(f'Fight, minions cnt {self.minions_cnt}')
                         continue
                     # 向后拉,寻找怪
-                    if search_fail_cnt >= 4:
+                    # UP 模式下 search_up_fight 已精确判断无目标，无需等待 4 帧再滑动
+                    up_mode_immediate = (self._config.exploration_config.up_type != UpType.ALL)
+                    if search_fail_cnt >= 4 or up_mode_immediate:
                         search_fail_cnt = 0
                         if self._config.exploration_config.exploration_level == ExplorationLevel.EXPLORATION_28 and self.appear(self.I_SWIPE_END):
                             self.quit_explore()
@@ -212,7 +214,9 @@ class SoloExploration(BaseExploration):
                         logger.info(f'Fight, minions cnt {self.minions_cnt}')
                     continue
                 # 向后拉,寻找怪
-                if search_fail_cnt >= 4:
+                # UP 模式下 search_up_fight 已精确判断无目标，无需等待 4 帧再滑动
+                up_mode_immediate = (self._config.exploration_config.up_type != UpType.ALL)
+                if search_fail_cnt >= 4 or up_mode_immediate:
                     search_fail_cnt = 0
                     if self._config.exploration_config.exploration_level == ExplorationLevel.EXPLORATION_28 and self.appear(
                             self.I_SWIPE_END):
