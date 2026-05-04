@@ -130,28 +130,42 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
         while 1:
             def create_bond_team():
                 click_count = 0
+                # 增加房间连续确认，避免单次识别漏判
+                room_confirm_count = 0
                 while 1:
                     self.screenshot()
-                    if self.appear(self.I_GI_IN_ROOM):
+                    # 连续2次识别到在房间内，才确认进入，避免误判
+                    if self.appear(self.I_GI_IN_ROOM,interval=0.5):
+                        room_confirm_count+=1
+                        logger.info(f'确认在房间内，次数：{room_confirm_count}')
+                        if room_confirm_count >= 2:
+                            logger.info('成功进入房间，退出创建循环')
                         return True
+                    else:
+                        room_confirm_count = 0
+
+                    # 点击超限兜底，避免死循环
                     if click_count >= 6:
                         logger.error('Click fire failed')
                         logger.error(
                             'You might need to check your bondling number. It most possibly arrived to the max 500')
                         raise BondlingNumberMax
+                    # 优先处理弹窗，避免遮挡识别
+                    if self.appear_then_click(self.I_UI_CONFIRM,interval=1):
+                        continue
                     if self.check_and_invite(True):
                         continue
-                    # 某些活动的时候出现 “选择共鸣的阴阳师”
-                    if self.appear_then_click(self.I_UI_CONFIRM, interval=1):
-                        continue
-                    if self.appear(self.I_CREATE_TEAM, interval=1):
+                    # 只有不在房间内，才识别创建队伍按钮，提高阈值防误触
+                    if room_confirm_count == 0 and self.appear(self.I_CREATE_TEAM, interval=1.5, threshold=0.85):
+                        logger.info('检测到创建队伍按钮，开始创建房间')
                         self.ensure_private()
-                        self.appear_then_click(self.I_CREATE_TEAM, interval=2)
+                        if self.appear_then_click(self.I_CREATE_TEAM, interval=2):
+                            sleep(1.5)
+                            click_count += 1
                         continue
                     # 求援
-                    if self.appear(self.I_BALL_AREA, interval=1):
-                        return False
-                    if self.appear(self.I_BALL_HELP, interval=1):
+
+                    if room_confirm_count == 0 and self.appear(self.I_BALL_HELP, interval=1):
                         cu, res, total = self.O_B_BALL_NUMBER.ocr(self.device.image)
                         logger.info(f'ball is cu {cu}, total {total}')
                         if cu <= 0 and total == 99:
@@ -161,6 +175,10 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
                             sleep(1)
                             click_count += 1
                             continue
+                    #回到契灵主界面，创建失败退出
+                    if self.appear(self.I_BALL_AREA, interval=1):
+                        return False
+
 
             self.screenshot()
 
