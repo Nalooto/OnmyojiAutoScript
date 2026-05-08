@@ -168,6 +168,9 @@ class ScriptTask(GameUi, GeneralBattle, SwitchSoul, DuelAssets, SwitchOnmyoji):
             self.check_and_get_reward()
             if self.appear(self.I_CHECK_DUEL, interval=0.6) and self.appear(self.I_D_HELP, interval=0.6):  # 斗技主界面
                 break
+            if self.appear(self.I_D_WIN_SHARE,interval= 1.2): #拔得头筹
+                self.click(random_click(ltrb=(True, True, False, True)), interval=1.2)
+                continue
             if self.appear_then_click(self.I_UI_BACK_RED, interval=1.2):  # 关闭段位上升页面
                 ret_timer.reset()
                 continue
@@ -189,7 +192,7 @@ class ScriptTask(GameUi, GeneralBattle, SwitchSoul, DuelAssets, SwitchOnmyoji):
                 self.duel_exit_battle()
                 continue
             if ret is None and not battle_operated:  # 进行战斗前的操作
-                self.ui_click(self.O_D_HAND, self.O_D_AUTO, interval=0.8)
+                self.ui_click(self.O_BATTLE_HAND, self.O_BATTLE_AUTO, interval=0.8)
                 self.green_mark(self.conf.duel_config.green_enable, self.conf.duel_config.green_mark)
                 battle_operated = True
                 self.reset_device('BATTLE_STATUS_S')

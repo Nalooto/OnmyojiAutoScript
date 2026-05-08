@@ -17,8 +17,9 @@ from tasks.Exploration.config import ChooseRarity, UpType, ExplorationLevel
 from tasks.Component.GeneralBattle.general_battle import GeneralBattle, ExitMatcher
 from tasks.GameUi.game_ui import GameUi
 from tasks.GameUi.matcher import any_of
-from tasks.GameUi.page import page_exploration, page_shikigami_records, page_main
+from tasks.GameUi.page import page_shikigami_records, page_main
 from tasks.Utils.config_enum import ShikigamiClass
+import tasks.Exploration.page as pages
 
 from module.logger import logger
 from module.base.timer import Timer
@@ -92,7 +93,7 @@ class BaseExploration(GameUi, GeneralBattle, GeneralRoom, GeneralInvite, Replace
 
         if self.appear(self.I_CHECK_EXPLORATION) and not self.appear(self.I_E_SETTINGS_BUTTON):
             return Scene.WORLD
-        elif self.appear(self.I_UI_BACK_RED) and self.appear(self.I_E_EXPLORATION_CLICK):
+        elif self.appear(self.I_E_EXPLORATION_CLICK):
             return Scene.ENTRANCE
         elif self.appear(self.I_E_SETTINGS_BUTTON) or self.appear(self.I_E_AUTO_ROTATE_ON) or self.appear(self.I_E_AUTO_ROTATE_OFF):
             return Scene.MAIN
@@ -131,6 +132,9 @@ class BaseExploration(GameUi, GeneralBattle, GeneralRoom, GeneralInvite, Replace
             if con.buff_exp_100_click:
                 self.exp_100()
             self.close_buff()
+        page_exploration = self.navigator.resolve_page(pages.page_exploration)
+        page_exp_entrance = self.navigator.resolve_page(pages.page_exp_entrance)
+        page_exploration.connect(page_exp_entrance, self.open_expect_level, key="page_exploration->page_exp_entrance")
 
     def post_process(self):
         self.goto_page(page_main)
@@ -351,7 +355,7 @@ class BaseExploration(GameUi, GeneralBattle, GeneralRoom, GeneralInvite, Replace
         logger.info("RealmRaid and Exploration  set_next_run !")
         next_run = datetime.now() + con_scrolls.scrolls_cd
         self.set_next_run(task='Exploration', success=False, finish=False, target=next_run)
-        self.set_next_run(task='RealmRaid', success=False, finish=False, target=datetime.now())
+        self.set_next_run(task='RealmRaid', success=False, finish=False, server = False, target=datetime.now())
         self.set_next_run(task='MemoryScrolls', success=False, finish=False, target=datetime.now())
         raise TaskEnd
 
@@ -373,14 +377,14 @@ class BaseExploration(GameUi, GeneralBattle, GeneralRoom, GeneralInvite, Replace
         boss_timer.start()
         while 1:
             self.screenshot()
-            if self.appear(self.I_UI_BACK_RED) and self.appear(self.I_E_EXPLORATION_CLICK):
+            if self.appear(self.I_E_EXPLORATION_CLICK):
                 break
             if boss_timer.reached():
                 # https://github.com/runhey/OnmyojiAutoScript/issues/548
                 logger.warning('Exit immediately after the boss battle')
                 break
             if self.appear_then_click(self.I_E_EXIT_CONFIRM, interval=0.8) or \
-                    self.appear_then_click(self.I_BACK_Y, interval=2.8):
+                    self.appear_then_click(self.I_UI_BACK_YELLOW, interval=2.8):
                 continue
             if self.appear(self.I_EXPLORATION_TITLE) or self.appear(self.I_CHECK_EXPLORATION):
                 break

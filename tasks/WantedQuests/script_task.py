@@ -87,81 +87,6 @@ class ScriptTask(WQExplore, SecretScriptTask, WantedQuestsAssets):
             self.execute_mission(self.O_WQ_TEXT_ALL, total - cu, number_challenge)
             sleep(1.5)
 
-
-
-        # region 旧代码
-        # # 第一个位置
-        # wq_1_done = False
-        # wq_2_done = False
-        # while 1:
-        #     self.screenshot()
-        #     if self.appear(self.I_WQ_BOX):
-        #         self.ui_get_reward(self.I_WQ_BOX)
-        #         continue
-        #     if self.appear(self.I_TREASURE_BOX_CLICK):
-        #         self.ui_get_reward(self.I_TREASURE_BOX_CLICK)
-        #         continue
-        #     if ocr_error_count > 10:
-        #         logger.warning('OCR failed too many times, exit')
-        #         break
-        #     # if self.ocr_appear(self.O_WQ_TEXT_1, interval=1):
-        #     if (not wq_1_done) and self.txt_ocr_appear(self.O_WQ_TEXT_1, r".*[封|野]印.*", self.device.image):
-        #         # cu, re, total = self.O_WQ_NUM_1.ocr(self.device.image)
-        #         cu, re, total = self.process_ocr(self.O_WQ_NUM_1, self.device.image)
-        #         if cu == re == total == 0:
-        #             logger.warning('OCR failed and have a try')
-        #             ocr_error_count += 1
-        #             # 尝试打一次
-        #             unknown_num = self.O_WQ_NUM_UNKNOWN_1.ocr(self.device.image)
-        #             if unknown_num > 14:
-        #                 self.execute_mission(self.O_WQ_TEXT_1, 1, number_challenge)
-        #         if total > 14:
-        #             logger.warning("Total number of wanted quests is greater than 14")
-        #             total = total % 10
-        #         if cu > total:
-        #             logger.warning('Current number of wanted quests is greater than total number')
-        #             cu = cu % 10
-        #         if cu < total and re != 0:
-        #             self.execute_mission(self.O_WQ_TEXT_1, min(total - cu, 20), number_challenge)
-        #         if cu == total:
-        #             wq_1_done = True
-        #
-        #     # if self.ocr_appear(self.O_WQ_TEXT_2, interval=1):
-        #     if self.txt_ocr_appear(self.O_WQ_TEXT_2, r".*[封|野]印.*", self.device.image):
-        #         # cu, re, total = self.O_WQ_NUM_2.ocr(self.device.image)
-        #         cu, re, total = self.process_ocr(self.O_WQ_NUM_2, self.device.image)
-        #         if cu == re == total == 0:
-        #             logger.warning('OCR failed and have a try')
-        #             ocr_error_count += 1
-        #             # 尝试打一次
-        #             unknown_num = self.O_WQ_NUM_UNKNOWN_2.ocr(self.device.image)
-        #             if unknown_num > 14:
-        #                 self.execute_mission(self.O_WQ_TEXT_2, 1, number_challenge)
-        #         if total > 14:
-        #             logger.warning("Total number of wanted quests is greater than 14")
-        #             total = total % 10
-        #         if cu > total:
-        #             logger.warning('Current number of wanted quests is greater than total number')
-        #             cu = cu % 10
-        #         if cu < total and re != 0:
-        #             self.execute_mission(self.O_WQ_TEXT_2, min(total - cu, 20), number_challenge)
-        #         continue
-        #
-        #     # 妖气封印或者年兽，那就四分钟后继续
-        #     if self.appear(self.I_WQ_D1111) or self.appear(self.I_WQ_NIAN):
-        #         logger.warning('Tiger is in the way, wait for 4 minutes')
-        #         logger.info('Time to wait for 4 minutes')
-        #         self.set_next_run('WantedQuests', target=datetime.now() + timedelta(minutes=4))
-        #         raise TaskEnd('WantedQuests')
-        #     if self.appear(self.I_WQ_CHECK_TASK):
-        #         continue
-        #     sleep(1.5)
-        #     self.screenshot()
-        #     if not self.appear(self.I_WQ_CHECK_TASK):
-        #         logger.info('No wanted quests')
-        #         break
-        # endregion
-
         self.next_run()
         raise TaskEnd('WantedQuests')
 
@@ -330,6 +255,8 @@ class ScriptTask(WQExplore, SecretScriptTask, WantedQuestsAssets):
             # ,荒川之怒·壹，4，前往按钮，function
             result = [-1, '', -1, GOTO_BUTTON[index], self.challenge, '']
             type_wq = OCR_WQ_TYPE[index].ocr(self.device.image)
+            if type_wq == '式神':  # 适配老逻辑, 将式神碎片改为挑战
+                type_wq = '挑战'
             info_wq_1 = OCR_WQ_INFO[index].ocr(self.device.image)
             info_wq_1 = info_wq_1.replace('：', ':').replace('（', '(').replace('）', ')')
             info_wq_1 = info_wq_1.replace('：', ':')
@@ -395,6 +322,8 @@ class ScriptTask(WQExplore, SecretScriptTask, WantedQuestsAssets):
         except ExploreWantedBoss:
             logger.warning('The extreme case. The quest only needs to challenge one final boss, so skip it')
             self.want_strategy_excluding.append(info_wq_list[0])
+        finally:
+            self.goto_page(page_exploration)
 
     def challenge(self, goto_btn, num):
         self.ui_click(goto_btn, self.I_WQC_FIRE)
@@ -403,13 +332,15 @@ class ScriptTask(WQExplore, SecretScriptTask, WantedQuestsAssets):
         # 锁定阵容进入战斗
         wq_config = GeneralBattleConfig(lock_team_enable=True)
         self.run_general_battle(config=wq_config, exit_matcher=self.I_WQC_FIRE)
-        self.wait_until_appear(self.I_WQC_FIRE, wait_time=4)
-        self.ui_click_until_disappear(self.I_UI_BACK_RED)
-        # 我忘记了打完后是否需要关闭 挑战界面
 
     def secret(self, goto, num=1):
         self.ui_click(goto, self.I_WQSE_FIRE)
         for i in range(num):
+            self.screenshot()
+            # 若是当周特殊秘闻则禁止连续进攻, 战斗结束之后直接退到探索页面重新进入挑战(避免当周秘闻没打结果跳转到第一层)
+            if self.appear(self.I_WQSE_SPECIAL_FIRE):
+                logger.warning('Current is special secret, exit and retry')
+                break
             self.wait_until_appear(self.I_WQSE_FIRE)
             # self.ui_click_until_disappear(self.I_WQSE_FIRE)
             # 又臭又长的对话针的是服了这个网易
@@ -429,16 +360,6 @@ class ScriptTask(WQExplore, SecretScriptTask, WantedQuestsAssets):
                         self.device.click_record_clear()
                     continue
             success = self.run_general_battle(self.battle_config, exit_matcher=self.I_WQSE_FIRE)
-        while 1:
-            self.screenshot()
-            if self.appear(self.I_CHECK_EXPLORATION):
-                break
-            if self.appear_then_click(self.I_BACK_Y, interval=1.5):
-                continue
-            if self.appear_then_click(self.I_UI_BACK_RED, interval=1):
-                continue
-            if self.appear_then_click(self.I_UI_BACK_BLUE, interval=1.5):
-                continue
         logger.info('Secret mission finished')
 
     def invite_random(self, add_button: RuleImage):
@@ -678,10 +599,14 @@ class ScriptTask(WQExplore, SecretScriptTask, WantedQuestsAssets):
         reg_progress = re.compile(r'^(\d+)([7/])(\d+)$')
         # 没有检测到斜杠，符合格式：前N位与后N位相同,表示已完成
         reg_XX = re.compile(r'^(\d+)\1$')
+        # 过滤掉协或者未知悬赏等其他无用字符
+        reg_other = re.compile(r'[?？协边]')
         for index, res in enumerate(res_list):
             if reg_fengyin.match(res.ocr_text):
                 continue
             if reg_time.match(res.ocr_text):
+                continue
+            if reg_other.match(res.ocr_text) is not None:
                 continue
             if (match := reg_progress.match(res.ocr_text)):
                 spliter_index = match.start(2)
@@ -702,16 +627,13 @@ class ScriptTask(WQExplore, SecretScriptTask, WantedQuestsAssets):
             # 例如：1414 66 1212
             if reg_XX.match(res.ocr_text):
                 continue
-            # 什么都没匹配上，判断上一个识别结果如果为悬赏封印，那么认为该识别结果错误，尝试执行一次
-            last_index = (index - 1) if index > 0 else 0
-            if reg_fengyin.match(res_list[last_index].ocr_text):
-                return 0, 1, 3, calc_xywh(res_list[last_index].box)
+            # 什么都没匹配上，则跳过该次识别
 
         return -1, -1, -1, [0, 0, 0, 0]
 
     def is_wq_remained(self):
         # 检测是否还存在任务
-        return self.appear(self.I_WQ_LIST_TOP_BOTTOM_CHECK)
+        return self.appear(self.O_WQ_LIST_CHECK)
 
 
 
