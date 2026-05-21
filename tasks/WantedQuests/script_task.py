@@ -67,9 +67,9 @@ class ScriptTask(WQExplore, SecretScriptTask, WantedQuestsAssets):
                 logger.info("get reward")
                 self.ui_get_reward(self.I_WQ_BOX)
                 continue
-            if self.appear(self.I_TREASURE_BOX_CLICK):
+            if self.appear(self.I_E_REWARD_BOX_BIG):
                 logger.info("get treasure")
-                self.ui_get_reward(self.I_TREASURE_BOX_CLICK)
+                self.ui_get_reward(self.I_E_REWARD_BOX_BIG)
                 continue
             if error_count > 3:
                 logger.warning('failed too many times, exit')
@@ -597,7 +597,7 @@ class ScriptTask(WQExplore, SecretScriptTask, WantedQuestsAssets):
 
         res_list = self.O_WQ_TEXT_ALL.detect_and_ocr(img)
         import re
-        reg_time = re.compile(r'^([01]?[0-9]|2[0-3]):([0-5]?[0-9]):?([0-5]?[0-9])?$')
+        reg_time = re.compile(r'^D?([01]?[0-9]|2[0-3]):([0-5]?[0-9]):?([0-5]?[0-9])?$')
         reg_fengyin = re.compile(r'.*[封|野]印.*')
         # 由于斜杠'/'经常被误识别为'7',且悬赏封印悬赏怪物总数没有与‘7’相关的数字
         reg_progress = re.compile(r'^(\d+)([7/])(\d+)$')
@@ -626,6 +626,7 @@ class ScriptTask(WQExplore, SecretScriptTask, WantedQuestsAssets):
                 if cu == total:
                     # 该任务已完成，一般是悬赏任务，邀请人没有做导致的
                     continue
+                logger.info(f'find wq {res.ocr_text} @ {xywh}')
                 return cu, re, total, xywh
             # 例如：1414 66 1212
             if reg_XX.match(res.ocr_text):
