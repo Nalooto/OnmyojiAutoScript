@@ -69,6 +69,8 @@ class BondlingFairylandAssets:
 	I_BF_LOCAL_4_NONE = RuleImage(roi_front=(911,488,26,25), roi_back=(899,468,53,56), threshold=0.8, method="Template matching", file="./tasks/BondlingFairyland/bf/bf_bf_local_4_none.png")
 	# 镇墓兽 
 	I_BF_LOCAL_5_TOMB_GUARD = RuleImage(roi_front=(1039,487,31,31), roi_back=(1026,481,56,51), threshold=0.8, method="Template matching", file="./tasks/BondlingFairyland/bf/bf_bf_local_5_tomb_guard.png")
+	# 皮肤碎片活动页 
+	I_BF_ACTIVITY_FRAGMENT = RuleImage(roi_front=(552,671,178,45), roi_back=(552,671,178,45), threshold=0.8, method="Template matching", file="./tasks/BondlingFairyland/bf/bf_bf_activity_fragment.png")
 
 
 	# Ocr Rule Assets

@@ -42,7 +42,7 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
         logger.info('Update page_battle_result')
         page_result.recognizer = any_of(self.I_BATTLE_FAIL_ABANDON, self.I_CAP_AGAIN, self.I_CAP_SUCCESS,
                                         self.I_CAP_FAILURE, self.I_BATTLE_FAIL, self.I_BATTLE_SUCCESS,
-                                        page_result.recognizer)
+                                        self.I_BF_ACTIVITY_FRAGMENT, page_result.recognizer)
         # 契灵结算弹窗会叠在战斗页面上，需要更高优先级避免被底层战斗页抢先识别。
         page_result.priority = 50
 
@@ -51,6 +51,10 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
         bondling_mode = self.config.bondling_fairyland.bondling_config.bondling_mode
         cap_again = bondling_mode in [BondlingMode.MODE3, BondlingMode.MODE4]
         clicked = False
+        #新增：处理活动碎片的结算界面，优先点击活动碎片，避免识别漏掉结算界面导致无法继续点击再挑战或者是放弃
+        if self.appear_then_click(self.I_BF_ACTIVITY_FRAGMENT, interval=1):
+            clicked = True
+            return BattleAction.CONTINUE
         if cap_again:
             # 开启连续结契需要重置点击记录(连点10次)
             if self.appear_then_click(self.I_CAP_AGAIN, interval=1):

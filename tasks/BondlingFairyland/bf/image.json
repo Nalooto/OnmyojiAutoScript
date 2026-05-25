@@ -88,5 +88,14 @@
     "method": "Template matching",
     "threshold": 0.8,
     "description": "镇墓兽"
+  },
+  {
+    "itemName": "bf_activity_fragment",
+    "imageName": "bf_bf_activity_fragment.png",
+    "roiFront": "552,671,178,45",
+    "roiBack": "552,671,178,45",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "皮肤碎片活动页"
   }
 ]
