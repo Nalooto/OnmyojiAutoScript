@@ -366,9 +366,6 @@ class BaseExploration(GameUi, GeneralBattle, GeneralRoom, GeneralInvite, Replace
 
     def arrive_end(self) -> bool:
         """是否到达探索的最后方, 需要先调用截图(滑动超过6次直接判定已经到达底部)"""
-        if self.device.click_record.count(self.S_SWIPE_BACKGROUND_RIGHT.name) >= 6:
-            self.device.click_record_clear()
-            return True
         return self._match_end.stable(self.device.image, refresh_after_stable=True, frame_id=self.device.image_frame_id)
 
     def get_fire_button(self) -> Optional[RuleImage | RuleGif]:

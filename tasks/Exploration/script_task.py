@@ -54,8 +54,6 @@ class ScriptTask(BaseExploration):
                     if self._config.exploration_config.auto_rotate == AutoRotate.yes:
                         self.appear_then_click(self.I_E_AUTO_ROTATE_OFF, interval=0.8)
                 case pages.page_exp_main:
-                    if self.switch_rotate():
-                        continue
                     fire_button = self.get_fire_button()
                     if fire_button is not None:
                         self.fire(fire_button)
@@ -67,6 +65,7 @@ class ScriptTask(BaseExploration):
                         continue
                 case pages.page_exploration | pages.page_exp_entrance:
                     self.collect_treasure_box()
+                    self.device.click_record_clear()
                     self.fire_monster_type = ''  # 入口处重置怪物类型
                     self.goto_page(pages.page_exp_main)
                 case pages.page_battle_prepare | pages.page_battle:
