@@ -93,8 +93,6 @@ class BattleContext:
     battle_timer: Timer
     # 长战斗卡死保护刷新计时器；每次进入 `run_general_battle()` 时重建。
     long_refresh_timer: Timer
-    # 已经执行的长战斗刷新次数；最大刷新次数后退出战斗。
-    long_refresh_count: int = 0
     # 当前调用使用的战斗类型分组键；决定共享行为状态的归属。
     battle_key: str
     # 当前 `battle_key` 共享的一次性行为状态。
@@ -113,6 +111,8 @@ class BattleContext:
     last_page: Page | None = None
     # 单次调用内的连战轮次计数；首轮从 1 开始。
     continuous_count: int = 1
+    # 已经执行的长战斗刷新次数；最大刷新次数后退出战斗。
+    long_refresh_count: int = 0
     # 结算结束后暂时识别不到战斗页面时的首个时间戳；用于 x 秒兜底。
     reward_no_battle_ts: float | None = None
     # 当前调用是否已进入快速退出路径；该状态只在本次调用内有效。
