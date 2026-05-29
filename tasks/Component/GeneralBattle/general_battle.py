@@ -93,6 +93,8 @@ class BattleContext:
     battle_timer: Timer
     # 长战斗卡死保护刷新计时器；每次进入 `run_general_battle()` 时重建。
     long_refresh_timer: Timer
+    # 已经执行的长战斗刷新次数；最大刷新次数后退出战斗。
+    long_refresh_count: int = 0
     # 当前调用使用的战斗类型分组键；决定共享行为状态的归属。
     battle_key: str
     # 当前 `battle_key` 共享的一次性行为状态。
@@ -141,6 +143,8 @@ class GeneralBattle(GeneralBuff, GeneralBattleAssets):
     """
     使用这个通用的战斗必须要求这个任务的 config 有 general_battle_config。
     """
+
+    MAX_LONG_REFRESH_COUNT = 3
 
     def __init__(self, config, device) -> None:
         """初始化通用战斗运行时缓存。
@@ -301,6 +305,7 @@ class GeneralBattle(GeneralBuff, GeneralBattleAssets):
         return BattleContext(
             battle_timer=Timer(timeout).start(),
             long_refresh_timer=Timer(180).start(),
+            long_refresh_count=0,
             battle_key=battle_key,
             shared_behavior_state=self._battle_shared_state.setdefault(battle_key, BattleBehaviorState()),
             call_behavior_state=BattleBehaviorState(),
@@ -468,6 +473,7 @@ class GeneralBattle(GeneralBuff, GeneralBattleAssets):
         """
         context.battle_timer = Timer(self._resolve_battle_timeout(config)).start()
         context.long_refresh_timer = Timer(180).start()
+        context.long_refresh_count = 0
         context.last_page = None
         context.reward_no_battle_ts = None
         context.quick_exit = bool(config.quick_exit)
@@ -509,7 +515,19 @@ class GeneralBattle(GeneralBuff, GeneralBattleAssets):
             None: 需要刷新时原地重置底层长等待状态。
         """
         if context.long_refresh_timer.reached():
-            logger.info("Refresh long battle stuck timer")
+            if context.long_refresh_count >= self.MAX_LONG_REFRESH_COUNT:
+                logger.warning(
+                    "Long battle refresh count exceeded max (%d), exit battle",
+                    self.MAX_LONG_REFRESH_COUNT,
+                )
+                context.quick_exit = True
+                return
+            context.long_refresh_count += 1
+            logger.info(
+                "Refresh long battle stuck timer (%d/%d)",
+                context.long_refresh_count,
+                self.MAX_LONG_REFRESH_COUNT,
+            )
             self.device.stuck_record_clear()
             self.device.stuck_record_add("BATTLE_STATUS_S")
             context.long_refresh_timer.reset()
