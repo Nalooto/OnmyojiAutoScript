@@ -54,17 +54,15 @@ class ScriptTask(BaseExploration):
                     if self._config.exploration_config.auto_rotate == AutoRotate.yes:
                         self.appear_then_click(self.I_E_AUTO_ROTATE_OFF, interval=0.8)
                 case pages.page_exp_main:
-                    if self.collect_reward():
-                        continue
                     if self.switch_rotate():
                         continue
                     fire_button = self.get_fire_button()
                     if fire_button is not None:
                         self.fire(fire_button)
                         continue
-                    # 执行滑动了且探索已经到底且当前不是boss
-                    if self.swipe(self.S_SWIPE_BACKGROUND_RIGHT, interval=1) and \
-                            self.arrive_end() and self.fire_monster_type != 'boss':
+                    # 如果已经击败boss，或者执行滑动了且探索已经到底，那么就回到入口重新开始探索
+                    if self.fire_monster_type == 'boss' or \
+                        (self.swipe(self.S_SWIPE_BACKGROUND_RIGHT, interval=1) and self.arrive_end()) :
                         self.goto_page(pages.page_exp_entrance)
                         continue
                 case pages.page_exploration | pages.page_exp_entrance:
