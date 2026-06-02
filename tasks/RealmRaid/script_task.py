@@ -7,12 +7,14 @@ from cached_property import cached_property
 from tasks.GameUi.default_pages import page_exploration
 
 from tasks.base_task import BaseTask
-from tasks.Component.GeneralBattle.general_battle import ExitMatcher, GeneralBattle
+from tasks.Component.GeneralBattle.config_general_battle import GeneralBattleConfig
+from tasks.Component.GeneralBattle.general_battle import BattleAction, BattleContext, ExitMatcher, GeneralBattle
 from tasks.GameUi.game_ui import GameUi
-from tasks.GameUi.page import page_realm_raid, page_main, page_shikigami_records
+from tasks.GameUi.page import page_realm_raid
 from tasks.RealmRaid.assets import RealmRaidAssets
 from tasks.RealmRaid.config import RealmRaid, AttackNumber, WhenAttackFail
 from tasks.Component.SwitchSoul.switch_soul import SwitchSoul
+from tasks.RealmRaid.page import page_shikigami_records
 
 
 from module.logger import logger
@@ -26,18 +28,37 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, RealmRaidAssets):
     medal_grid: ImageGrid = None
     init_tickets: int = -1
 
+    def _handle_result(self, context: BattleContext, config: GeneralBattleConfig) -> BattleAction:
+        if config.quick_exit:
+            context.reward_no_battle_ts = None
+            context.is_win = not self.appear(self.I_FALSE)
+            return BattleAction.EXIT_WIN if context.is_win else BattleAction.EXIT_LOSE
+        return super()._handle_result(context, config)
+
     def _exit_matcher(self) -> ExitMatcher:
         return self.I_BACK_RED
 
     def run(self):
         con = self.config.realm_raid
+        # 直接进入个人突破页面
+        self.goto_page(page_realm_raid)
+
+        # 在突破页面内先判断票数，如果没有票了或者已经达到攻击次数上限，就直接结束任务
+        if not self.check_ticket(con.raid_config.number_base):
+            self.goto_page(page_exploration)
+            self.set_next_run(task='RealmRaid', success=False, finish=True)
+            raise TaskEnd
+
+        # 票数足够，现在开始进行御魂切换
         if con.switch_soul_config.enable:
             self.goto_page(page_shikigami_records)
             self.run_switch_soul(con.switch_soul_config.switch_group_team)
+                
         if con.switch_soul_config.enable_switch_by_name:
             self.goto_page(page_shikigami_records)
             self.run_switch_soul_by_name(con.switch_soul_config.group_name, con.switch_soul_config.team_name)
-
+            
+        # 切换完成后，必须返回突破页面
         self.goto_page(page_realm_raid)
 
         # 有呱太活动的时候第一次进入还会 出现一个弹窗
@@ -83,6 +104,7 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, RealmRaidAssets):
                     break
             # 判断是不是左上角第一个
             lock_before = con.general_battle_config.lock_team_enable
+            handled_first_target = False
             if index == 1:
                 logger.info('Now is the first one')
                 if con.raid_config.exit_four:
@@ -91,19 +113,23 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, RealmRaidAssets):
                         # 没有成功进入战斗则重新检查票数和其他条件
                         continue
                     self.run_general_battle(config=self.build_quick_exit_config(con.general_battle_config))
-                    self.fire(index)
+                    self.fire_again()
                     self.run_general_battle(config=self.build_quick_exit_config(con.general_battle_config))
-                    self.fire(index)
+                    self.fire_again()
                     self.run_general_battle(config=self.build_quick_exit_config(con.general_battle_config))
-                    self.fire(index)
+                    self.fire_again()
                     self.run_general_battle(config=self.build_quick_exit_config(con.general_battle_config))
+                    self.fire_again()
+                    last_battle = self.run_general_battle(con.general_battle_config)
+                    handled_first_target = True
             elif self.check_medal_is_frog(frog, medal, index):
                 # 如果挑战的这只是呱太的话，就要把锁定改为不锁定
                 con.general_battle_config.lock_team_enable = False
-            if not self.fire(index):
-                # 没有成功进入战斗则重新检查票数和其他条件
-                continue
-            last_battle = self.run_general_battle(con.general_battle_config)
+            if not handled_first_target:
+                if not self.fire(index):
+                    # 没有成功进入战斗则重新检查票数和其他条件
+                    continue
+                last_battle = self.run_general_battle(con.general_battle_config)
             if lock_before:
                 con.general_battle_config.lock_team_enable = lock_before
             # 检查是否每三次领一个奖励
@@ -427,6 +453,25 @@ class ScriptTask(GeneralBattle, GameUi, SwitchSoul, RealmRaidAssets):
             if self.click(click, interval=2):
                 continue
         logger.info(f'Click fire {order} success')
+        return False
+
+    def fire_again(self) -> bool:
+        """
+        失败界面再次挑战
+        :return: 是否再战成功
+        """
+        self.wait_until_appear(self.I_FIRE_AGAIN)
+        while True:
+            self.screenshot()
+            if not self.appear(self.I_FIRE_AGAIN):
+                logger.info(f'Click fire again success')
+                return True
+            if self.appear_then_click(self.I_SHOW_AGAIN, interval=2):
+                continue
+            if self.appear_then_click(self.I_FRESH_ENSURE, interval=2):
+                continue
+            if self.appear_then_click(self.I_FIRE_AGAIN, interval=2):
+                continue
         return False
 
     @cached_property
