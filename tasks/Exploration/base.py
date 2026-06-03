@@ -368,7 +368,7 @@ class BaseExploration(GameUi, GeneralBattle, GeneralRoom, GeneralInvite, Replace
 
     def collect_reward(self) -> bool:
         """处理掉落奖励(True表示进行了操作, False表示没有操作)"""
-        return self.collect_treasure_box() or self.collect_paper_man_reward()
+        return  self.collect_paper_man_reward()
 
     def enter_team(self) -> bool:
         """进入战斗组队页面"""
