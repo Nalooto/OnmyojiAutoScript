@@ -70,6 +70,8 @@ class ScriptTask(BaseExploration):
                 break
 
     def run_on_exp_main(self):
+        if self.collect_reward():
+            return
         if self.user_status != UserStatus.ALONE:
             if self.fire_monster_type == 'boss':
                 return
@@ -82,8 +84,7 @@ class ScriptTask(BaseExploration):
         fire_button = self.get_fire_button()
         if fire_button is not None and self.fire(fire_button):
             return
-        if self.fire_monster_type == 'boss' or \
-                        (self.swipe(self.S_SWIPE_BACKGROUND_RIGHT, interval=1) and self.arrive_end()) :
+        if self.fire_monster_type != 'boss' and self.swipe(self.S_SWIPE_BACKGROUND_RIGHT, interval=1) and self.arrive_end() :
             self.quit_exp_main()
 
     def run_on_exp_entrance(self):
@@ -120,8 +121,16 @@ class ScriptTask(BaseExploration):
 
     def run_on_battle(self):
         self.run_general_battle(self._config.general_battle_config, exit_matcher=pages.page_exp_main)
+        self._reset_exploration_swipe_interval() # 战斗结束后重置探索滑动间隔，避免直接滑动。
         self._match_end.refresh()  # 防止同一张图多次打怪导致误以为探索结束
         self.wait_start_time = datetime.now()  # 队友等待时间重置
+
+    def _reset_exploration_swipe_interval(self):
+        """战斗结束后重置探索向左滑动间隔，避免直接连续滑动。"""
+
+        timer = self.interval_timer.get(self.S_SWIPE_BACKGROUND_RIGHT.name)
+        if timer is not None:
+            timer.reset()
 
     def run_on_battle_team(self):
         self.need_exit = False
