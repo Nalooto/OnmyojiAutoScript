@@ -70,7 +70,7 @@ class ScriptTask(BaseExploration):
                 break
 
     def run_on_exp_main(self):
-        if self.collect_reward():
+        if self.need_exit :
             return
         if self.user_status != UserStatus.ALONE:
             if self.fire_monster_type == 'boss':
@@ -84,7 +84,9 @@ class ScriptTask(BaseExploration):
         fire_button = self.get_fire_button()
         if fire_button is not None and self.fire(fire_button):
             return
-        if self.fire_monster_type != 'boss' and self.swipe(self.S_SWIPE_BACKGROUND_RIGHT, interval=1) and self.arrive_end() :
+        # 如果已经打完boss，或者已经到达探索终点，则退出探索
+        if self.fire_monster_type == 'boss' or \
+              (self.swipe(self.S_SWIPE_BACKGROUND_RIGHT, interval=1) and self.arrive_end() ):
             self.quit_exp_main()
 
     def run_on_exp_entrance(self):
