@@ -204,13 +204,14 @@ class ImageRuntime:
         """
         注册一张截图到帧缓存，并返回服务端生成的 `frame_id`。
 
+        支持 JPEG 编码（新版客户端）和 pickle 序列化（旧版客户端）两种格式，
+        通过首字节自动检测。
+
         Args:
-            image_bytes: 客户端序列化后的 numpy 数组字节流。
+            image_bytes: 客户端编码后的图像字节流。
             config_name: 截图所属脚本配置名；同配置新帧会替换旧帧。
         """
-        image = pickle.loads(image_bytes)
-        if not isinstance(image, np.ndarray):
-            raise TypeError("register_frame expects numpy.ndarray payload")
+        image = self._decode_image_bytes(image_bytes)
 
         config_name = self._normalize_config_name(config_name)
         frame_id = uuid.uuid4().hex
@@ -545,21 +546,48 @@ class ImageRuntime:
         logger.debug(f"Load template {normalized_path} fingerprint={fingerprint}")
         return entry
 
+    @staticmethod
+    def _decode_image_bytes(image_bytes: bytes) -> np.ndarray:
+        """
+        自动检测图像编码格式并解码为 numpy 数组。
+
+        检测规则：JPEG 数据以 ``0xFF`` 开头，其余视为 pickle 序列化的
+        numpy 数组（向后兼容旧版客户端）。
+
+        Args:
+            image_bytes: 编码后的图像字节流。
+
+        Returns:
+            解码后的 numpy 数组 (H, W, 3) uint8 BGR。
+
+        Raises:
+            TypeError: 解码结果不是 numpy 数组。
+        """
+        # JPEG 的 SOI 标记以 0xFF 开头
+        if image_bytes and image_bytes[0] == 0xFF:
+            arr = np.frombuffer(image_bytes, dtype=np.uint8)
+            image = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+            if image is None:
+                raise ValueError("Failed to decode JPEG image bytes")
+            return image
+        # 向后兼容：旧版客户端使用 pickle
+        image = pickle.loads(image_bytes)
+        if not isinstance(image, np.ndarray):
+            raise TypeError("image payload must be numpy.ndarray")
+        return image
+
     def _resolve_image(self, frame_id: str | None, image_bytes: bytes | None) -> np.ndarray:
         """
         统一解析一次匹配请求使用的输入图像。
 
         `frame_id` 与 `image_bytes` 二选一：优先复用已注册截图，只有在没有 `frame_id`
-        时才会反序列化请求中直接上传的图像数据。
+        时才会解码请求中直接上传的图像数据。
         """
         if frame_id:
             return self._get_frame_entry(frame_id).image
         if image_bytes is None:
             raise ValueError("Either frame_id or image_bytes must be provided")
-        image = pickle.loads(image_bytes)
-        if not isinstance(image, np.ndarray):
-            raise TypeError("image payload must be numpy.ndarray")
-        return image
+        return self._decode_image_bytes(image_bytes)
 
     def _normalize_rule(
         self,
