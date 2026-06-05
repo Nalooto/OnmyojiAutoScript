@@ -295,11 +295,20 @@ class BaseExploration(GameUi, GeneralBattle, GeneralRoom, GeneralInvite, Replace
         return False
 
     def fire(self, button) -> bool:
-        """进入战斗(True:成功进入战斗, 否则False)"""
+        """进入战斗(True:成功进入战斗/识别到退出弹窗, 否则False)
+        这里之所以违反页面特性使用循环, 是因为由于怪物移动的原因可能导致一次点击会无法进入战斗,
+        回到外循环之后由于UP旋转的特性可能导致识别不到怪物然后开始滑动, 导致错过的怪物更多
+        因此这里使用贪心的思想, 只要识别到怪物一次就尽最大可能直接进入战斗, 保证尽可能有怪则打
+        """
         max_tries = 4
         while max_tries > 0:
             self.screenshot()
-            if self.get_current_page() in (pages.page_battle_prepare, pages.page_battle):
+            cur_page = self.get_current_page()
+            # 退出动画期间可能再次识别到怪物开始攻击, 因此取消退出
+            if cur_page == pages.page_exp_exit:
+                self.need_exit = False
+                return True
+            if cur_page in (pages.page_battle_prepare, pages.page_battle):
                 return True
             if self.appear_then_click(button, interval=0.8):
                 max_tries -= 1
@@ -368,7 +377,7 @@ class BaseExploration(GameUi, GeneralBattle, GeneralRoom, GeneralInvite, Replace
 
     def collect_reward(self) -> bool:
         """处理掉落奖励(True表示进行了操作, False表示没有操作)"""
-        return self.collect_treasure_box() or self.collect_paper_man_reward()
+        return  self.collect_paper_man_reward()
 
     def enter_team(self) -> bool:
         """进入战斗组队页面"""

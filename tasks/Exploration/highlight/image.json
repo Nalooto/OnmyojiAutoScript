@@ -156,7 +156,7 @@
     "itemName": "up_daruma",
     "imageName": "highlight_up_daruma.png",
     "roiFront": "1146,510,80,80",
-    "roiBack": "1,265,1278,369",
+    "roiBack": "0,353,1280,285",
     "method": "Sift Flann",
     "threshold": 0.8,
     "description": "达摩怪"
