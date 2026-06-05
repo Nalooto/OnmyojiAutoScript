@@ -150,7 +150,7 @@ class ScriptTask(BaseExploration):
         self.appear_then_click(self.I_E_AUTO_ROTATE_OFF, interval=0.8)
 
     def run_on_exp_exit(self):
-        if not self.need_exit: # 不需要退出则点取消, 通常是直接在探索界面启动脚本
+        if not self.need_exit: # 不需要退出则点取消, 通常是直接在探索界面启动脚本(或退出期间在主界面再次识别到需要攻击的怪物)
             self.appear_then_click(self.I_E_EXIT_CANCEL, interval=0.8)
             return
         self.appear_then_click(self.I_E_EXIT_CONFIRM, interval=0.8)
