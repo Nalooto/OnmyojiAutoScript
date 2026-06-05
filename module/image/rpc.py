@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import atexit
 import multiprocessing
-import pickle
 import socket
 import time
 from typing import Any, Optional
 
+import cv2
 import numpy as np
 import zerorpc
 
@@ -245,10 +245,11 @@ class ImageClient:
         向服务端注册一张截图帧，并返回可复用的 `frame_id`。
 
         Args:
-            image: 当前截图的 numpy 数组。客户端会在本地序列化后上传一次。
+            image: 当前截图的 numpy 数组。客户端会在本地编码后上传一次。
             config_name: 当前脚本配置名；服务端用它删除同配置旧截图帧。
         """
-        payload = pickle.dumps(image, protocol=4)
+        ok, payload = cv2.imencode('.jpg', image, [cv2.IMWRITE_JPEG_QUALITY, 92])
+        payload = payload.tobytes()
         return self.client.register_frame(payload, config_name)
 
     def get_frame_info(self, frame_id: str) -> dict[str, Any]:
@@ -273,14 +274,15 @@ class ImageClient:
     @staticmethod
     def _encode_image_payload(image: np.ndarray | None, frame_id: str | None) -> bytes | None:
         """
-        统一处理“直接上传图片”与“复用已注册 frame_id”两种调用方式。
+        统一处理"直接上传图片"与"复用已注册 frame_id"两种调用方式。
 
         当提供 `frame_id` 时，本次请求不再重复上传整张图片；只有在没有 `frame_id`
-        且显式传入 `image` 时，才会序列化图片数据。
+        且显式传入 `image` 时，才会编码图片数据。
         """
         if frame_id is not None or image is None:
             return None
-        return pickle.dumps(image, protocol=4)
+        ok, payload = cv2.imencode('.jpg', image, [cv2.IMWRITE_JPEG_QUALITY, 92])
+        return payload.tobytes()
 
     def match_rule(
         self,
@@ -375,7 +377,7 @@ class ImageClient:
         nms_threshold: float = 0.3,
     ) -> list[dict[str, Any]]:
         """
-        在同一帧上对多个规则执行“全量匹配 + NMS 去重”。
+        在同一帧上对多个规则执行"全量匹配 + NMS 去重"。
 
         该接口适合一次性拿到多组模板的非冗余命中列表。
         """
