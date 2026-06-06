@@ -98,10 +98,14 @@ class GeneralBuff(BaseTask, GeneralBuffAssets):
         self.set_switch_area(area)
         if is_open:
             logger.info('Start open gold50 buff')
-            self.ui_click(self.I_CLOSE_RED, self.I_OPEN_YELLOW, interval=1)
+            if not self.ui_click_until_appear_or_timeout(self.I_CLOSE_RED, self.I_OPEN_YELLOW, interval=1, timeout=5):
+                logger.warning('Open gold50 buff timeout')
+                return False
             return True
         logger.info('Start close gold50 buff')
-        self.ui_click(self.I_OPEN_YELLOW, self.I_CLOSE_RED, interval=1)
+        if not self.ui_click_until_appear_or_timeout(self.I_OPEN_YELLOW, self.I_CLOSE_RED, interval=1, timeout=5):
+            logger.warning('Close gold50 buff timeout')
+            return False
         return True
 
     def gold_100(self, is_open: bool = True) -> bool:
@@ -119,10 +123,14 @@ class GeneralBuff(BaseTask, GeneralBuffAssets):
         self.set_switch_area(area)
         if is_open:
             logger.info('Start open gold100 buff')
-            self.ui_click(self.I_CLOSE_RED, self.I_OPEN_YELLOW, interval=1)
+            if not self.ui_click_until_appear_or_timeout(self.I_CLOSE_RED, self.I_OPEN_YELLOW, interval=1, timeout=5):
+                logger.warning('Open gold100 buff timeout')
+                return False
             return True
         logger.info('Start close gold100 buff')
-        self.ui_click(self.I_OPEN_YELLOW, self.I_CLOSE_RED, interval=1)
+        if not self.ui_click_until_appear_or_timeout(self.I_OPEN_YELLOW, self.I_CLOSE_RED, interval=1, timeout=5):
+            logger.warning('Close gold100 buff timeout')
+            return False
         return True
 
     def exp_50(self, is_open: bool = True) -> bool:
@@ -149,10 +157,14 @@ class GeneralBuff(BaseTask, GeneralBuffAssets):
             break
         if is_open:
             logger.info('Start open exp50 buff')
-            self.ui_click(self.I_CLOSE_RED, self.I_OPEN_YELLOW, interval=1)
+            if not self.ui_click_until_appear_or_timeout(self.I_CLOSE_RED, self.I_OPEN_YELLOW, interval=1, timeout=5):
+                logger.warning('Open exp50 buff timeout')
+                return False
             return True
         logger.info('Start close exp50 buff')
-        self.ui_click(self.I_OPEN_YELLOW, self.I_CLOSE_RED, interval=1)
+        if not self.ui_click_until_appear_or_timeout(self.I_OPEN_YELLOW, self.I_CLOSE_RED, interval=1, timeout=5):
+            logger.warning('Close exp50 buff timeout')
+            return False
         return True
 
     def exp_100(self, is_open: bool = True) -> bool:
@@ -164,10 +176,10 @@ class GeneralBuff(BaseTask, GeneralBuffAssets):
         logger.info('Exp 100 buff')
         max_swipe = 2
         while True:
+            self.screenshot()
             if max_swipe <= 0:
                 logger.warning('No exp 100 buff')
                 return False
-            self.screenshot()
             area = self.get_area(self.O_EXP_100)
             if area:
                 self.set_switch_area(area)
@@ -179,10 +191,14 @@ class GeneralBuff(BaseTask, GeneralBuffAssets):
             break
         if is_open:
             logger.info('Start open exp100 buff')
-            self.ui_click(self.I_CLOSE_RED, self.I_OPEN_YELLOW, interval=1)
+            if not self.ui_click_until_appear_or_timeout(self.I_CLOSE_RED, self.I_OPEN_YELLOW, interval=1, timeout=5):
+                logger.warning('Open exp100 buff timeout')
+                return False
             return True
         logger.info('Start close exp100 buff')
-        self.ui_click(self.I_OPEN_YELLOW, self.I_CLOSE_RED, interval=1)
+        if not self.ui_click_until_appear_or_timeout(self.I_OPEN_YELLOW, self.I_CLOSE_RED, interval=1, timeout=5):
+            logger.warning('Close exp100 buff timeout')
+            return False
         return True
 
     def get_area_image(self, target: RuleImage) -> Optional[tuple[int, int, int, int]]:
@@ -220,10 +236,14 @@ class GeneralBuff(BaseTask, GeneralBuffAssets):
         self.set_switch_area(area)
         if is_open:
             logger.info('Start open awake buff')
-            self.ui_click(self.I_CLOSE_RED, self.I_OPEN_YELLOW, interval=1)
+            if not self.ui_click_until_appear_or_timeout(self.I_CLOSE_RED, self.I_OPEN_YELLOW, interval=1, timeout=5):
+                logger.warning('Open awake buff timeout')
+                return False
             return True
         logger.info('Start close awake buff')
-        self.ui_click(self.I_OPEN_YELLOW, self.I_CLOSE_RED, interval=1)
+        if not self.ui_click_until_appear_or_timeout(self.I_OPEN_YELLOW, self.I_CLOSE_RED, interval=1, timeout=5):
+            logger.warning('Close awake buff timeout')
+            return False
         return True
 
     def soul(self, is_open: bool = True):
@@ -241,10 +261,14 @@ class GeneralBuff(BaseTask, GeneralBuffAssets):
         self.set_switch_area(area)
         if is_open:
             logger.info('Start open soul buff')
-            self.ui_click(self.I_CLOSE_RED, self.I_OPEN_YELLOW, interval=1)
+            if not self.ui_click_until_appear_or_timeout(self.I_CLOSE_RED, self.I_OPEN_YELLOW, interval=1, timeout=5):
+                logger.warning('Open soul buff timeout')
+                return False
             return True
         logger.info('Start close soul buff')
-        self.ui_click(self.I_OPEN_YELLOW, self.I_CLOSE_RED, interval=1)
+        if not self.ui_click_until_appear_or_timeout(self.I_OPEN_YELLOW, self.I_CLOSE_RED, interval=1, timeout=5):
+            logger.warning('Close soul buff timeout')
+            return False
         return True
 
     def reject_invite(self):
