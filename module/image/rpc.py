@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import atexit
 import multiprocessing
-import pickle
 import socket
 import time
 from typing import Any, Optional
@@ -405,7 +404,8 @@ class ImageClient:
             threshold: 动态模板匹配阈值。
             name: 用于日志输出的匹配名称。
         """
-        template_payload = pickle.dumps(template, protocol=4)
+        ok, template_payload = cv2.imencode('.jpg', template, [cv2.IMWRITE_JPEG_QUALITY, 92])
+        template_payload = template_payload.tobytes()
         image_payload = self._encode_image_payload(image=image, frame_id=frame_id)
         return self.client.match_dynamic_template(template_payload, frame_id, image_payload, roi_back, threshold, name)
 

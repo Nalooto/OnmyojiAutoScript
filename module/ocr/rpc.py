@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import atexit
 import multiprocessing
-import pickle
 import socket
 import threading
 import time
@@ -13,9 +12,11 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+import cv2
 import numpy as np
 import zerorpc
 
+from module.base.utils import decode_image_bytes
 from module.exception import ScriptError
 from module.logger import logger
 from module.ocr.ppocr import TextSystem
@@ -167,10 +168,7 @@ class OcrRuntime:
 
     @staticmethod
     def _decode_image(image_bytes: bytes) -> np.ndarray:
-        image = pickle.loads(image_bytes)
-        if not isinstance(image, np.ndarray):
-            raise TypeError("OCR payload must be numpy.ndarray")
-        return image
+        return decode_image_bytes(image_bytes)
 
     @staticmethod
     def _rotate_vertical(image: np.ndarray) -> np.ndarray:
@@ -371,7 +369,8 @@ class ModelProxy:
         return self.client.get_server_info()
 
     def ocr_single_line(self, image: np.ndarray):
-        payload = pickle.dumps(image, protocol=4)
+        ok, payload = cv2.imencode('.jpg', image, [cv2.IMWRITE_JPEG_QUALITY, 92])
+        payload = payload.tobytes()
         return self.client.ocr_single_line(payload)
 
     def detect_and_ocr(
@@ -382,7 +381,8 @@ class ModelProxy:
         box_thresh: Optional[float] = None,
         vertical: bool = False,
     ):
-        payload = pickle.dumps(image, protocol=4)
+        ok, payload = cv2.imencode('.jpg', image, [cv2.IMWRITE_JPEG_QUALITY, 92])
+        payload = payload.tobytes()
         results = self.client.detect_and_ocr(payload, drop_score, unclip_ratio, box_thresh, vertical)
         from ppocronnx.predict_system import BoxedResult
         return [

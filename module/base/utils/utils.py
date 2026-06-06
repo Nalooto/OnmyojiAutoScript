@@ -499,6 +499,38 @@ def location2node(location):
     return col2name(x) + str(y)
 
 
+def decode_image_bytes(image_bytes: bytes):
+    """
+    自动检测图像编码格式并解码为 numpy 数组。
+
+    检测规则：JPEG 数据以 ``0xFF`` 开头，其余视为 pickle 序列化的
+    numpy 数组（向后兼容旧版客户端）。
+
+    Args:
+        image_bytes: 编码后的图像字节流。
+
+    Returns:
+        解码后的 numpy 数组 (H, W, 3) uint8 BGR。
+
+    Raises:
+        TypeError: 解码结果不是 numpy 数组。
+        ValueError: JPEG 解码失败。
+    """
+    # JPEG 的 SOI 标记以 0xFF 开头
+    if image_bytes and image_bytes[0] == 0xFF:
+        arr = np.frombuffer(image_bytes, dtype=np.uint8)
+        image = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        if image is None:
+            raise ValueError("Failed to decode JPEG image bytes")
+        return image
+    # 向后兼容：旧版客户端使用 pickle
+    import pickle
+    image = pickle.loads(image_bytes)
+    if not isinstance(image, np.ndarray):
+        raise TypeError("image payload must be numpy.ndarray")
+    return image
+
+
 def load_image(file, area=None):
     """
     Load an image like pillow and drop alpha channel.

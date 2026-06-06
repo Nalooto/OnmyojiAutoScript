@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import os
-import pickle
 import threading
 import time
 import uuid
@@ -15,7 +14,7 @@ import cv2
 import numpy as np
 from numpy import fromfile, uint8
 
-from module.base.utils import is_approx_rectangle
+from module.base.utils import decode_image_bytes, is_approx_rectangle
 from module.logger import logger
 
 
@@ -443,9 +442,7 @@ class ImageRuntime:
             name: 用于日志中的匹配名称。
         """
         image = self._resolve_image(frame_id=frame_id, image_bytes=image_bytes)
-        template = pickle.loads(template_bytes)
-        if not isinstance(template, np.ndarray):
-            raise TypeError("match_dynamic_template expects numpy.ndarray template")
+        template = decode_image_bytes(template_bytes)
         roi = list(roi_back) if roi_back is not None else [0, 0, image.shape[1], image.shape[0]]
         matched, score, roi_front = self._template_match_image(
             image=image,
@@ -551,30 +548,10 @@ class ImageRuntime:
         """
         自动检测图像编码格式并解码为 numpy 数组。
 
-        检测规则：JPEG 数据以 ``0xFF`` 开头，其余视为 pickle 序列化的
-        numpy 数组（向后兼容旧版客户端）。
-
-        Args:
-            image_bytes: 编码后的图像字节流。
-
-        Returns:
-            解码后的 numpy 数组 (H, W, 3) uint8 BGR。
-
-        Raises:
-            TypeError: 解码结果不是 numpy 数组。
+        委托给共享工具 ``decode_image_bytes``，统一处理 JPEG 与旧版 pickle
+        两种编码格式的自动检测与解码。
         """
-        # JPEG 的 SOI 标记以 0xFF 开头
-        if image_bytes and image_bytes[0] == 0xFF:
-            arr = np.frombuffer(image_bytes, dtype=np.uint8)
-            image = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-            if image is None:
-                raise ValueError("Failed to decode JPEG image bytes")
-            return image
-        # 向后兼容：旧版客户端使用 pickle
-        image = pickle.loads(image_bytes)
-        if not isinstance(image, np.ndarray):
-            raise TypeError("image payload must be numpy.ndarray")
-        return image
+        return decode_image_bytes(image_bytes)
 
     def _resolve_image(self, frame_id: str | None, image_bytes: bytes | None) -> np.ndarray:
         """
