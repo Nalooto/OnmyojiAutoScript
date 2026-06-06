@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import atexit
 import multiprocessing
+import pickle
 import socket
 import time
 from typing import Any, Optional
