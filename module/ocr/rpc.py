@@ -17,7 +17,6 @@ import pickle
 import numpy as np
 import zerorpc
 
-from module.base.utils import decode_image_bytes
 from module.exception import ScriptError
 from module.logger import logger
 from module.ocr.ppocr import TextSystem
@@ -169,7 +168,10 @@ class OcrRuntime:
 
     @staticmethod
     def _decode_image(image_bytes: bytes) -> np.ndarray:
-        return decode_image_bytes(image_bytes)
+        image = pickle.loads(image_bytes)
+        if not isinstance(image, np.ndarray):
+            raise TypeError("OCR payload must be numpy.ndarray")
+        return image
 
     @staticmethod
     def _rotate_vertical(image: np.ndarray) -> np.ndarray:

@@ -544,7 +544,7 @@ class ImageRuntime:
         logger.debug(f"Load template {normalized_path} fingerprint={fingerprint}")
         return entry
 
-    
+    @staticmethod
     def decode_image_bytes(image_bytes: bytes) -> np.ndarray:
         """
         图像解码为 numpy 数组。
