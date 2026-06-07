@@ -12,7 +12,8 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-import cv2
+import pickle
+
 import numpy as np
 import zerorpc
 
@@ -369,8 +370,7 @@ class ModelProxy:
         return self.client.get_server_info()
 
     def ocr_single_line(self, image: np.ndarray):
-        ok, payload = cv2.imencode('.jpg', image, [cv2.IMWRITE_JPEG_QUALITY, 100])
-        payload = payload.tobytes()
+        payload = pickle.dumps(image, protocol=4)
         return self.client.ocr_single_line(payload)
 
     def detect_and_ocr(
@@ -381,8 +381,7 @@ class ModelProxy:
         box_thresh: Optional[float] = None,
         vertical: bool = False,
     ):
-        ok, payload = cv2.imencode('.jpg', image, [cv2.IMWRITE_JPEG_QUALITY, 100])
-        payload = payload.tobytes()
+        payload = pickle.dumps(image, protocol=4)
         results = self.client.detect_and_ocr(payload, drop_score, unclip_ratio, box_thresh, vertical)
         from ppocronnx.predict_system import BoxedResult
         return [

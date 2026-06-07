@@ -7,7 +7,8 @@ import socket
 import time
 from typing import Any, Optional
 
-import cv2
+import pickle
+
 import numpy as np
 import zerorpc
 
@@ -248,8 +249,7 @@ class ImageClient:
             image: 当前截图的 numpy 数组。客户端会在本地编码后上传一次。
             config_name: 当前脚本配置名；服务端用它删除同配置旧截图帧。
         """
-        ok, payload = cv2.imencode('.jpg', image, [cv2.IMWRITE_JPEG_QUALITY, 100])
-        payload = payload.tobytes()
+        payload = pickle.dumps(image, protocol=4)
         return self.client.register_frame(payload, config_name)
 
     def get_frame_info(self, frame_id: str) -> dict[str, Any]:
@@ -281,8 +281,7 @@ class ImageClient:
         """
         if frame_id is not None or image is None:
             return None
-        ok, payload = cv2.imencode('.jpg', image, [cv2.IMWRITE_JPEG_QUALITY, 100])
-        return payload.tobytes()
+        return pickle.dumps(image, protocol=4)
 
     def match_rule(
         self,
@@ -404,8 +403,7 @@ class ImageClient:
             threshold: 动态模板匹配阈值。
             name: 用于日志输出的匹配名称。
         """
-        ok, template_payload = cv2.imencode('.jpg', template, [cv2.IMWRITE_JPEG_QUALITY, 100])
-        template_payload = template_payload.tobytes()
+        template_payload = pickle.dumps(template, protocol=4)
         image_payload = self._encode_image_payload(image=image, frame_id=frame_id)
         return self.client.match_dynamic_template(template_payload, frame_id, image_payload, roi_back, threshold, name)
 

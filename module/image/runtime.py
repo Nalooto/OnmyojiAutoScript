@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import pickle
 import threading
 import time
 import uuid
@@ -14,7 +15,7 @@ import cv2
 import numpy as np
 from numpy import fromfile, uint8
 
-from module.base.utils import decode_image_bytes, is_approx_rectangle
+from module.base.utils import is_approx_rectangle
 from module.logger import logger
 
 
@@ -210,7 +211,7 @@ class ImageRuntime:
             image_bytes: 客户端编码后的图像字节流。
             config_name: 截图所属脚本配置名；同配置新帧会替换旧帧。
         """
-        image = self._decode_image_bytes(image_bytes)
+        image = self.decode_image_bytes(image_bytes)
 
         config_name = self._normalize_config_name(config_name)
         frame_id = uuid.uuid4().hex
@@ -442,7 +443,7 @@ class ImageRuntime:
             name: 用于日志中的匹配名称。
         """
         image = self._resolve_image(frame_id=frame_id, image_bytes=image_bytes)
-        template = decode_image_bytes(template_bytes)
+        template = self.decode_image_bytes(template_bytes)
         roi = list(roi_back) if roi_back is not None else [0, 0, image.shape[1], image.shape[0]]
         matched, score, roi_front = self._template_match_image(
             image=image,
@@ -543,15 +544,16 @@ class ImageRuntime:
         logger.debug(f"Load template {normalized_path} fingerprint={fingerprint}")
         return entry
 
-    @staticmethod
-    def _decode_image_bytes(image_bytes: bytes) -> np.ndarray:
+    
+    def decode_image_bytes(image_bytes: bytes) -> np.ndarray:
         """
-        自动检测图像编码格式并解码为 numpy 数组。
+        图像解码为 numpy 数组。
 
-        委托给共享工具 ``decode_image_bytes``，统一处理 JPEG 与旧版 pickle
-        两种编码格式的自动检测与解码。
         """
-        return decode_image_bytes(image_bytes)
+        image = pickle.loads(image_bytes)
+        if not isinstance(image, np.ndarray):
+            raise TypeError("image payload must be numpy.ndarray")
+        return image
 
     def _resolve_image(self, frame_id: str | None, image_bytes: bytes | None) -> np.ndarray:
         """
@@ -564,7 +566,7 @@ class ImageRuntime:
             return self._get_frame_entry(frame_id).image
         if image_bytes is None:
             raise ValueError("Either frame_id or image_bytes must be provided")
-        return self._decode_image_bytes(image_bytes)
+        return self.decode_image_bytes(image_bytes)
 
     def _normalize_rule(
         self,
