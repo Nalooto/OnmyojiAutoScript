@@ -15,6 +15,7 @@ from tasks.Exploration.assets import ExplorationAssets
 from tasks.Exploration.config import ChooseRarity, UpType, ExplorationLevel, AutoRotate, UserStatus, Exploration
 from tasks.Component.GeneralBattle.general_battle import GeneralBattle, ExitMatcher, BattleContext, BattleAction
 from tasks.GameUi.game_ui import GameUi
+from tasks.GameUi.page_definition import Page, sort_pages_by_priority
 from tasks.Utils.config_enum import ShikigamiClass
 import tasks.Exploration.page as pages
 
@@ -32,7 +33,30 @@ class BaseExploration(GameUi, GeneralBattle, GeneralRoom, GeneralInvite, Replace
 
     def _exit_matcher(self) -> ExitMatcher:
         return pages.any_of(self.I_E_SETTINGS_BUTTON, self.I_E_AUTO_ROTATE_ON, self.I_E_AUTO_ROTATE_OFF)
+    
+    def get_current_page(self, skip_first_screenshot: bool = True, fallback: bool = False) -> Page | None:
+        """探索使用单帧确认。主循环有 while True + sleep(0.5) 兜底，不需二次截图。"""
+        self.maybe_screenshot(skip_first_screenshot)
+        categories = self._default_detect_categories()
 
+        if page := self._detect_pages_single(self.navigator.all_pages(categories)):
+            return page
+        if fallback and categories:
+            return self._detect_pages_single(self.navigator.all_pages())
+        return None
+
+    def _detect_pages_single(self, pages: list[Page]) -> Page | None:
+        """单帧识别当前页面，不二次截图。按优先级返回第一个匹配页面。"""
+        if not pages:
+            return None
+        self._prepare_page_rule_image_cache(pages)
+        indexed = [(i, p) for i, p in enumerate(pages) if self.match_page_once(p)]
+        for page in sort_pages_by_priority(indexed):
+            self.navigator.current_page = page
+            logger.attr("UI", page.name)
+            return page
+        return None
+    
     @cached_property
     def _config(self) -> Exploration:
         self.config.exploration.general_battle_config.lock_team_enable = True

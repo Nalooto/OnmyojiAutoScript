@@ -51,8 +51,11 @@ class ScriptTask(BaseExploration):
         pages.page_battle_team_exit = self.navigator.resolve_page(pages.page_battle_team_exit)
         pages.page_battle_team_exit.connect(pages.page_exp_entrance, self.I_UI_CONFIRM, key="page_battle_team_exit->page_exp_entrance")
         while True:
+            screenshot_start_time = time.time()
             self.screenshot()
             current_page = self.get_current_page()
+            screenshot_end_time = time.time()
+            logger.info(f'Screenshot cost {int((screenshot_end_time - screenshot_start_time) * 1000)} milliseconds')
             if current_page is None:
                 time.sleep(0.5)
                 continue
@@ -72,6 +75,9 @@ class ScriptTask(BaseExploration):
     def run_on_exp_main(self):
         if self.need_exit :
             return
+        if self.fire_monster_type == 'boss':
+            self.quit_exp_main()
+            return
         if self.user_status != UserStatus.ALONE:
             if self.fire_monster_type == 'boss':
                 return
@@ -81,12 +87,14 @@ class ScriptTask(BaseExploration):
                 return
         if self.switch_rotate() or self.user_status == UserStatus.MEMBER:
             return
+        start=time.time()
         fire_button = self.get_fire_button()
+        cost = time.time() - start
+        logger.info(f'Get fire button cost {int(cost * 1000)} milliseconds,fire button: {fire_button}')
         if fire_button is not None and self.fire(fire_button):
             return
-        # 如果已经打完boss，或者已经到达探索终点，则退出探索
-        if self.fire_monster_type == 'boss' or \
-              (self.swipe(self.S_SWIPE_BACKGROUND_RIGHT, interval=1) and self.arrive_end() ):
+        # 如果已经到达探索终点，则退出探索
+        if self.swipe(self.S_SWIPE_BACKGROUND_RIGHT, interval=0.5) and self.arrive_end() :
             self.quit_exp_main()
 
     def run_on_exp_entrance(self):
