@@ -342,6 +342,12 @@ class Handle:
         """
         if self.emulator_family == EmulatorFamily.FAMILY_MUMU:
             # 使用正则匹配12 来判定是不是mumu12这并不是一个好的方法
+            if self.root_node == None:
+                logger.error('Get screenshot handle num error, root node has no children')
+                return None
+            if self.root_node.children == None:
+                logger.error('Get screenshot handle num error, root node has no children')
+                return None
             name = self.root_node.children[0].name
             num = self.root_node.children[0].num
             if name == 'MuMuPlayer':
