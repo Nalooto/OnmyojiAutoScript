@@ -77,14 +77,6 @@ class ScriptTask(GameUi, MemoryScrollsAssets):
         # 返回召唤界面，目前只发现此种返回按键
         self.ui_click_until_disappear(self.I_MS_BACK, interval=1)
         logger.info('Return to Summon page')
-        # # 确认已离开绘卷界面，防止返回按键失效导致后续任务卡在绘卷界面
-        # self.screenshot()
-        # if self.appear(self.I_MS_FRAGMENT_S):
-        #     logger.warning('Back button failed, still on Memory Scrolls page, trying recovery')
-        #     self.close_unknown_pages()
-        #     self.screenshot()
-        #     if self.appear(self.I_MS_FRAGMENT_S):
-        #         logger.warning('Recovery failed, still on Memory Scrolls page')
     
     def goto_scroll(self, con):
         """
