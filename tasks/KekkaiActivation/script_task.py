@@ -1,6 +1,8 @@
 # This Python file uses the following encoding: utf-8
 # @author runhey
 # github https://github.com/runhey
+from typing import Dict, List, Tuple, Optional, Any, Union
+import numpy as np
 import time
 
 import random
@@ -21,10 +23,9 @@ from tasks.KekkaiUtilize.script_task import ScriptTask as KU
 from tasks.KekkaiUtilize.utils import CardClass
 from tasks.KekkaiActivation.assets import KekkaiActivationAssets
 from tasks.KekkaiActivation.utils import parse_rule
-from tasks.KekkaiActivation.config import ActivationConfig
+from tasks.KekkaiActivation.config import ActivationConfig, CardType, CardStar
 from tasks.Utils.config_enum import ShikigamiClass
 from tasks.GameUi.page import page_main, page_guild
-from tasks.KekkaiActivation.config import CardType
 
 """ 结界挂卡 """
 class ScriptTask(KU, KekkaiActivationAssets):
@@ -71,17 +72,121 @@ class ScriptTask(KU, KekkaiActivationAssets):
     @cached_property
     def dict_image_card(self) -> dict:
         return {v: k for k, v in self.dict_card_image.items()}
-
+    
     @cached_property
-    def order_targets(self) -> ImageGrid:
-        rule = self.config.kekkai_activation.activation_config.card_type
-        if rule == CardType.TAIKO:
-            return ImageGrid([self.I_CARDS_KAIKO_6, self.I_CARDS_KAIKO_5])
-        elif rule == CardType.FISH:
-            return ImageGrid([self.I_CARDS_FISH_6, self.I_CARDS_FISH_5])
-        else:
-            logger.error('Unknown utilize rule')
-            raise ValueError('Unknown utilize rule')
+    def star_mapping(self) -> dict:
+        """根据配置的星级返回目标卡和干扰卡的图片列表"""
+        card_star = self.config.kekkai_activation.activation_config.card_star
+        target_star = card_star.to_int()  # 获取目标星级数值
+        
+        # 定义卡片列表
+        cards = {
+            CardType.TAIKO: [
+                (6, self.I_CARDS_KAIKO_6),
+                (5, self.I_CARDS_KAIKO_5),
+                (4, self.I_CARDS_KAIKO_4),
+                (3, self.I_CARDS_KAIKO_3),
+            ],
+            CardType.FISH: [
+                (6, self.I_CARDS_FISH_6),
+                (5, self.I_CARDS_FISH_5),
+                (4, self.I_CARDS_FISH_4),
+                (3, self.I_CARDS_FISH_3),
+            ]
+        }
+        
+        result = {'target_images': {}, 'higher_images': {}}
+        
+        for card_type, card_list in cards.items():
+            # 目标卡：星级 ≤ 目标星级
+            result['target_images'][card_type] = [
+                card for star, card in card_list if star <= target_star
+            ]
+            # 干扰卡：星级 > 目标星级
+            result['higher_images'][card_type] = [
+                card for star, card in card_list if star > target_star
+            ]
+        
+        return result
+    
+    def _select_best_card_from_results(
+        self, 
+        filtered_results: List[Any], 
+        min_card_num: int, 
+        ocr_count: int
+    ) -> Optional[RuleClick]:
+        """
+        从过滤后的OCR结果中选择最佳卡片
+        :param filtered_results: 过滤后的OCR结果列表
+        :param min_card_num: 最低收益阈值
+        :param ocr_count: 当前OCR计数
+        :return: 选中的RuleClick对象，或None
+        """
+        logger.info(f"第{ocr_count}次滑动后识别到卡: {[result.ocr_text for result in filtered_results]}")
+        
+        # 提取数字并按数字排序
+        numeric_results = []
+        for result in filtered_results:
+            numbers = [int(num) for num in re.findall(r'\d+', result.ocr_text)]
+            if numbers:
+                if numbers[0] < min_card_num:
+                    logger.debug(f"卡牌收益 {numbers[0]} 低于阈值 {min_card_num}，跳过")
+                    continue
+                numeric_results.append((numbers[0], result))
+        
+        if numeric_results:
+            # 按数字大到小排序
+            sorted_results = [result for _, result in sorted(numeric_results, key=lambda x: x[0], reverse=True)]
+            max_result = sorted_results[0]
+            
+            return self._create_click_target(max_result)
+        
+        return None
+
+
+    def _create_click_target(self, ocr_result: Any) -> RuleClick:
+        """
+        创建点击目标
+        :param ocr_result: OCR结果对象
+        :return: RuleClick对象
+        """
+        box = ocr_result.box
+        x_min = self.O_CHECK_CARD_NUMBER.roi[0] + box[0][0]
+        y_min = self.O_CHECK_CARD_NUMBER.roi[1] + box[0][1]
+        width = box[1][0] - box[0][0]
+        height = box[2][1] - box[1][1]
+        roi = int(x_min), int(y_min), int(width), int(height)
+        
+        return RuleClick(roi_front=roi, roi_back=roi, name="tmpclick")
+
+    def _perform_swipe_action(self, current_ocr_count: int, swipe_limit: int, reason: str = "未找到符合条件的卡") -> Tuple[bool, int]:
+        """
+        执行滑动操作
+        
+        :param current_ocr_count: 当前OCR计数
+        :param swipe_limit: 滑动次数限制
+        :param reason: 滑动原因，用于日志记录
+        :return: (是否成功, 新的OCR计数)
+        """
+        new_ocr_count = current_ocr_count + 1
+        
+        # 检查是否达到滑动上限
+        if new_ocr_count >= swipe_limit:
+            logger.warning(f'已达到滑动次数上限({swipe_limit})，{reason}')
+            return False, new_ocr_count
+        
+        # 执行滑动操作
+        logger.info(f"{reason}，准备第{new_ocr_count}次滑动")
+        duration = 2
+        safe_pos_x = random.randint(200, 400)
+        safe_pos_y = random.randint(580, 600)
+        p1 = (safe_pos_x, safe_pos_y)
+        p2 = (safe_pos_x, safe_pos_y - 410)
+        logger.info('Swipe %s -> %s, %sS ' % (point2str(*p1), point2str(*p2), duration))
+        self.device.swipe_adb(p1, p2, duration=duration)
+        time.sleep(1)
+        self.screenshot()  # 确保截图更新
+        return True, new_ocr_count
 
     def run_activation(self, _config: ActivationConfig) -> bool:
         """
@@ -236,66 +341,81 @@ class ScriptTask(KU, KekkaiActivationAssets):
                         continue
 
     def check_card_num(self):
-        rule = self.config.kekkai_activation.activation_config.card_type
+        con = self.config.kekkai_activation.activation_config
+        rule = con.card_type
+        card_star = con.card_star
+        swipe_limit = con.swipe_retry_limit
+        
         if rule == CardType.TAIKO:
-            min_card_num = self.config.kekkai_activation.activation_config.min_taiko_num
+            min_card_num = con.min_taiko_num
             check_card = "勾玉"
         elif rule == CardType.FISH:
-            min_card_num = self.config.kekkai_activation.activation_config.min_fish_num
+            min_card_num = con.min_fish_num
             check_card = "体力"
         else:
             logger.error('Unknown utilize rule')
             raise ValueError('Unknown utilize rule')
-
+        
+        # 获取目标卡和干扰卡图片列表
+        star_mapping = self.star_mapping
+        target_images = star_mapping['target_images'].get(rule, [])
+        higher_images = star_mapping['higher_images'].get(rule, [])
+        
         ocr_count = 0
-        while 1:
+        has_ever_seen_target = False
+        
+        while True:
             self.screenshot()
-            results = self.O_CHECK_CARD_NUMBER.detect_and_ocr(self.device.image)
-            ocr_count += 1
-            # 第一步：筛选出包含 "体力或者勾玉" 的结果
-            filtered_results = [result for result in results if check_card in result.ocr_text]
-            logger.info(f"识别到卡: {[result.ocr_text for result in filtered_results]}")
-
-            # 第二步：提取数字并按数字排序
-            numeric_results = []
-            for result in filtered_results:
-                # 使用正则表达式提取所有数字
-                numbers = [int(num) for num in re.findall(r'\d+', result.ocr_text)]
-                if numbers:  # 如果提取到数字
-                    if numbers[0] < min_card_num:
+            
+            # 如果从未见过目标卡，检查当前页面是否有目标卡
+            if not has_ever_seen_target:
+                for target_image in target_images:
+                    if self.appear(target_image):
+                        has_ever_seen_target = True
+                        logger.info(f'首次检测到目标卡: {target_image.name}')
+                        break
+                
+                if has_ever_seen_target:
+                    # 检查是否有干扰卡（适用于所有有干扰卡的模式）
+                    has_higher = False
+                    for higher_image in higher_images:
+                        if self.appear(higher_image):
+                            has_higher = True
+                            logger.info(f'检测到干扰卡: {higher_image.name}')
+                            break
+                    
+                    if has_higher:
+                        logger.info(f'{card_star.value}模式下检测到干扰卡，跳过当前页')
+                        success, ocr_count = self._perform_swipe_action(
+                            ocr_count, swipe_limit, "跳过当前页"
+                        )
+                        if not success:
+                            return None
                         continue
-                    numeric_results.append((numbers[0], result))  # 按第一个数字排序
+                else:
+                    # 没有找到目标卡，执行常规滑动
+                    success, ocr_count = self._perform_swipe_action(ocr_count, swipe_limit, "未找到目标卡，滑动")
+                    if not success:
+                        return None
+                    continue
 
-            if numeric_results:
-                # 按数字大到小排序
-                sorted_results = [result for _, result in sorted(numeric_results, key=lambda x: x[0], reverse=True)]
-                max_result = sorted_results[0]  # 获取数字最大的结果对象
-
-                box = max_result.box  # 获取边界框坐标
-                x_min = self.O_CHECK_CARD_NUMBER.roi[0] + box[0][0]
-                y_min = self.O_CHECK_CARD_NUMBER.roi[1] + box[0][1]
-                width = box[1][0] - box[0][0]
-                height = box[2][1] - box[1][1]
-                roi = int(x_min), int(y_min), int(width), int(height)
-
-                target = RuleClick(roi_front=roi, roi_back=roi, name="tmpclick")
-                logger.info(f"选择挂卡: [{max_result.ocr_text}] {roi}")
-
-                return target
-            else:
-                if ocr_count > 3:
-                    logger.error('多次未找到符合条件的结果, 退出')
-                    return None
-                logger.warning("未找到符合条件的结果, 准备往上滑动")
-                duration = 2
-                safe_pos_x = random.randint(200, 400)
-                safe_pos_y = random.randint(580, 600)
-                p1 = (safe_pos_x, safe_pos_y)
-                p2 = (safe_pos_x, safe_pos_y - 410)
-                logger.info('Swipe %s -> %s, %sS ' % (point2str(*p1), point2str(*p2), duration))
-                self.device.swipe_adb(p1, p2, duration=duration)
-                time.sleep(1)
-                continue
+            # 常规OCR识别逻辑
+            results = self.O_CHECK_CARD_NUMBER.detect_and_ocr(self.device.image)
+            
+            # 执行常规OCR检查
+            filtered_results = [result for result in results if check_card in result.ocr_text]
+            
+            # 从结果中选择最佳卡片
+            result = self._select_best_card_from_results(filtered_results, min_card_num, ocr_count)
+            if result:
+                logger.info(f"选择挂卡: [{result.name}]")
+                return result
+            
+            # 使用滑动函数处理常规滑动
+            success, ocr_count = self._perform_swipe_action(ocr_count, swipe_limit)
+            if not success:
+                return None            
+            continue
 
     def _card_not_found(self):
         # 获取配置引用
