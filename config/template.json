@@ -1443,7 +1443,7 @@
       "double_scrolls": "默认绘卷一",
       "scroll_number": "卷一",
       "auto_close_exploration": false,
-      "notification_95": false
+      "notification": false
     },
     "memory_scrolls_finish": {
       "auto_finish_exploration": false,

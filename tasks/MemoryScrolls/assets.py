@@ -35,7 +35,7 @@ class MemoryScrollsAssets:
 	# 判断是否处于绘卷主界面 
 	I_MS_MAIN = RuleImage(roi_front=(689,3,40,50), roi_back=(689,3,40,50), threshold=0.8, method="Template matching", file="./tasks/MemoryScrolls/ms/ms_ms_main.png")
 	# 退出到召唤界面 
-	I_MS_BACK = RuleImage(roi_front=(32,31,43,45), roi_back=(32,31,43,45), threshold=0.8, method="Template matching", file="./tasks/MemoryScrolls/ms/ms_ms_back.png")
+	I_MS_BACK = RuleImage(roi_front=(32,31,43,45), roi_back=(32,31,43,45), threshold=0.7, method="Template matching", file="./tasks/MemoryScrolls/ms/ms_ms_back.png")
 	# 关闭分卷捐献界面 
 	I_MS_CLOSE = RuleImage(roi_front=(1145,48,39,41), roi_back=(1145,48,39,41), threshold=0.8, method="Template matching", file="./tasks/MemoryScrolls/ms/ms_ms_close.png")
 	# 贡献碎片 
@@ -65,6 +65,12 @@ class MemoryScrollsAssets:
 	# Ocr Rule Assets
 	# 识别当前绘卷进度 
 	O_M_SCROLL_PROGRESS = RuleOcr(roi=(401,591,89,27), area=(401,591,89,27), mode="Single", method="Default", keyword="", name="m_scroll_progress")
+	# 小碎片数量 
+	O_M_FRAGMENT_NUMS_S = RuleOcr(roi=(334,681,54,28), area=(334,681,54,28), mode="Digit", method="Default", keyword="", name="m_fragment_nums_s")
+	# 中碎片数量 
+	O_M_FRAGMENT_NUMS_M = RuleOcr(roi=(558,681,54,28), area=(558,681,54,28), mode="Digit", method="Default", keyword="", name="m_fragment_nums_m")
+	# 大碎片数量 
+	O_M_FRAGMENT_NUMS_L = RuleOcr(roi=(784,682,54,28), area=(784,682,54,28), mode="Digit", method="Default", keyword="", name="m_fragment_nums_l")
 
 
 	# Swipe Rule Assets

@@ -7,5 +7,32 @@
     "method": "Default",
     "keyword": "",
     "description": "识别当前绘卷进度"
+  },
+  {
+    "itemName": "m_fragment_nums_s",
+    "roiFront": "334,681,54,28",
+    "roiBack": "334,681,54,28",
+    "mode": "Digit",
+    "method": "Default",
+    "keyword": "",
+    "description": "小碎片数量"
+  },
+  {
+    "itemName": "m_fragment_nums_m",
+    "roiFront": "558,681,54,28",
+    "roiBack": "558,681,54,28",
+    "mode": "Digit",
+    "method": "Default",
+    "keyword": "",
+    "description": "中碎片数量"
+  },
+  {
+    "itemName": "m_fragment_nums_l",
+    "roiFront": "784,682,54,28",
+    "roiBack": "784,682,54,28",
+    "mode": "Digit",
+    "method": "Default",
+    "keyword": "",
+    "description": "大碎片数量"
   }
 ]

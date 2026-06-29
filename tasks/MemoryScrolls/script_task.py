@@ -11,7 +11,7 @@ from module.base.timer import Timer
 from datetime import timedelta, datetime
 
 from tasks.GameUi.game_ui import GameUi
-from tasks.GameUi.page import page_summon
+from tasks.GameUi.page import page_summon,page_main
 from tasks.MemoryScrolls.assets import MemoryScrollsAssets
 from tasks.MemoryScrolls.config import ScrollNumber
 
@@ -23,6 +23,8 @@ class ScriptTask(GameUi, MemoryScrollsAssets):
         con = self.config.memory_scrolls.memory_scrolls_config
         # 进入绘卷主界面
         self.goto_memoryscrolls_main(con) 
+        # 从召唤页返回庭院，防止穿插其他任务卡屏超时
+        self.goto_page(page_main)
         raise TaskEnd
     
     def goto_memoryscrolls_main(self, con):
@@ -32,6 +34,9 @@ class ScriptTask(GameUi, MemoryScrollsAssets):
                 self.screenshot()
                 if self.appear(self.I_MS_FRAGMENT_S):
                     logger.info('Entered Memory Scrolls main page')
+                    # 在绘卷主界面读取自身拥有的碎片数量（用于后续通知）
+                    if con.notification:
+                        self._fragment_counts = self.get_fragment_counts()
                     break
                 # 周年庆等时期会使用双绘卷
                 if self.appear(self.I_MS_DOUBLE_SCROLLS_ENTER):
@@ -72,6 +77,14 @@ class ScriptTask(GameUi, MemoryScrollsAssets):
         # 返回召唤界面，目前只发现此种返回按键
         self.ui_click_until_disappear(self.I_MS_BACK, interval=1)
         logger.info('Return to Summon page')
+        # # 确认已离开绘卷界面，防止返回按键失效导致后续任务卡在绘卷界面
+        # self.screenshot()
+        # if self.appear(self.I_MS_FRAGMENT_S):
+        #     logger.warning('Back button failed, still on Memory Scrolls page, trying recovery')
+        #     self.close_unknown_pages()
+        #     self.screenshot()
+        #     if self.appear(self.I_MS_FRAGMENT_S):
+        #         logger.warning('Recovery failed, still on Memory Scrolls page')
     
     def goto_scroll(self, con):
         """
@@ -103,13 +116,19 @@ class ScriptTask(GameUi, MemoryScrollsAssets):
                     raise TaskEnd
         
         # 到达指定进度时进行通知提示
-        if con.notification_95:
+        if con.notification:
             progress = self.get_memory_scroll_progress()
-            if progress is not None and progress >= 95:
-                logger.info(f'Memory Scrolls progress reached {progress:.2f}%, sending notification')
-                self.config.notifier.push(title='追忆绘卷进度95%', content=f'绘卷进度已达{progress:.2f}%，请立即空降')
+            if progress is not None:
+                content = f'目标绘卷进度已达{progress:.2f}%'
+                fragment_info = getattr(self, '_fragment_counts', None)
+                if fragment_info:
+                    content += f'\n碎片数量: 小×{fragment_info["s"]} 中×{fragment_info["m"]} 大×{fragment_info["l"]}'
+                self.config.notifier.push(title='追忆绘卷进度：', content=content)
+                
 
         # 判断是否需要捐献碎片
+        # 在通知推送后重新截图，避免图像后端帧缓存过期导致 RemoteError
+        self.screenshot()
         if self.appear(self.I_MS_CONTRIBUTE) or not self.appear(self.I_MS_COMPLETE):
             logger.info(f'Contributing Memory Scrolls for scroll {con.scroll_number.name}')
             if con.auto_contribute_memoryscrolls:
@@ -219,6 +238,37 @@ class ScriptTask(GameUi, MemoryScrollsAssets):
 
         logger.info(f'Memory Scrolls OCR progress recognized: "{result}" -> {progress:.2f}%')
         return progress
+
+    def get_fragment_counts(self) -> dict | None:
+        """
+        在绘卷主界面读取自身拥有的小、中、大碎片数量。
+        返回 {'s': int, 'm': int, 'l': int}，读取失败返回 None。
+        """
+        self.screenshot()
+        counts = {'s': 0, 'm': 0, 'l': 0}
+        for key, attr_name in [('s', 'O_M_FRAGMENT_NUMS_S'),
+                                ('m', 'O_M_FRAGMENT_NUMS_M'),
+                                ('l', 'O_M_FRAGMENT_NUMS_L')]:
+            ocr_target = getattr(self, attr_name, None)
+            if ocr_target is None:
+                logger.warning(f'OCR asset {attr_name} not available')
+                continue
+            result = ocr_target.ocr(self.device.image)
+            if isinstance(result, int):
+                # Digit 模式返回 int
+                counts[key] = result
+            elif isinstance(result, tuple) and len(result) >= 1:
+                # DigitCounter 模式返回 (current, remaining, total)
+                counts[key] = result[0]
+            elif isinstance(result, str):
+                # Single 模式返回字符串
+                match = re.search(r'\d+', result)
+                if match:
+                    counts[key] = int(match.group())
+            else:
+                logger.warning(f'Unexpected OCR result for {key}: {result}')
+        logger.info(f'Fragment counts - S: {counts["s"]}, M: {counts["m"]}, L: {counts["l"]}')
+        return counts
 
     @staticmethod
     def parse_scroll_progress(text: str) -> float | None:
