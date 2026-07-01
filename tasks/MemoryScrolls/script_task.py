@@ -11,7 +11,7 @@ from module.base.timer import Timer
 from datetime import timedelta, datetime
 
 from tasks.GameUi.game_ui import GameUi
-from tasks.GameUi.page import page_summon,page_main
+from tasks.GameUi.page import page_summon, page_main
 from tasks.MemoryScrolls.assets import MemoryScrollsAssets
 from tasks.MemoryScrolls.config import ScrollNumber
 
@@ -22,8 +22,8 @@ class ScriptTask(GameUi, MemoryScrollsAssets):
         self.goto_page(page_summon)
         con = self.config.memory_scrolls.memory_scrolls_config
         # 进入绘卷主界面
-        self.goto_memoryscrolls_main(con) 
-        # 从召唤页返回庭院，防止穿插其他任务卡屏超时
+        self.goto_memoryscrolls_main(con)
+        # 返回主界面
         self.goto_page(page_main)
         raise TaskEnd
     
