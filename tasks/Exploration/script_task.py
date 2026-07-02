@@ -77,12 +77,6 @@ class ScriptTask(BaseExploration):
                 break
 
     def run_on_exp_main(self):
-        if self.need_exit:
-            #如果超过5s还没有退出exp_main,继续进行退出操作，防止卡死等待
-            if datetime.now() - self.wait_start_time >= timedelta(seconds=5):
-                self.need_exit = False
-            else:
-                return
         if self.fire_monster_type == 'boss':
             self.quit_exp_main()
             return
