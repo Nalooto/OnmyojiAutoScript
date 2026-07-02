@@ -327,10 +327,10 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets):
         # 如果时间在00:00-12:00之间则设定时间为当日 12 时
         if now.time() < time(12, 0):
             self.custom_next_run(task='DailyTrifles', custom_time=Time(12, 0), time_delta=0)
-        # 如果时间在12:00-20:00之间则设定时间为当日 20 时
-        elif time(12, 0) <= now.time() < time(20, 0):
-            self.custom_next_run(task='DailyTrifles', custom_time=Time(20, 0), time_delta=0)
-        # 如果时间在20:00-23:59之间则设定时间为次日 12 时
+        # 如果时间在12:00-21:00之间则设定时间为当日 21 时
+        elif time(12, 0) <= now.time() < time(21, 0):
+            self.custom_next_run(task='DailyTrifles', custom_time=Time(21, 0), time_delta=0)
+        # 如果时间在21:00-23:59之间则设定时间为次日 12 时
         else:
             self.custom_next_run(task='DailyTrifles', custom_time=Time(12, 0), time_delta=1)
 
