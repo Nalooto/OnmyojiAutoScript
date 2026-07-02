@@ -99,7 +99,7 @@ class ScriptTask(BaseExploration):
         if fire_button is not None and self.fire(fire_button):
             return
         # 如果已经到达探索终点，则退出探索
-        if self.swipe(self.S_SWIPE_BACKGROUND_RIGHT, interval=0.5) and self.arrive_end() :
+        if self.swipe(self.S_SWIPE_BACKGROUND_RIGHT, interval=0.75) and self.arrive_end() :
             self.quit_exp_main()
 
     def run_on_exp_entrance(self):
