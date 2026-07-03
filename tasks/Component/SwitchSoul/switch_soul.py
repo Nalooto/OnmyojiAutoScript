@@ -35,6 +35,17 @@ class SwitchSoul(BaseTask, SwitchSoulAssets):
         self.click_preset()
         self.switch_souls(target)
 
+    def handle_download_popup(self) -> bool:
+        """
+        处理式神录切换御魂时可能出现的扩展包下载弹窗。
+        返回 True 表示发现并处理了弹窗。
+        """
+        self.screenshot()
+        if self.appear_then_click(self.I_CLOSE_DOWNLOAD, interval=1):
+            logger.info('Close download popup during switch soul')
+            return True
+        return False
+
     def click_preset(self) -> None:
         """
         点击预设
@@ -42,6 +53,8 @@ class SwitchSoul(BaseTask, SwitchSoulAssets):
         """
         while 1:
             self.screenshot()
+            if self.handle_download_popup():
+                continue
             if self.appear(self.I_SOU_SWITCH_1):
                 break
             if self.appear(self.I_SOU_SWITCH_2):

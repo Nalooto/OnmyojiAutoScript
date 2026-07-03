@@ -160,5 +160,14 @@
     "method": "Template matching",
     "threshold": 0.8,
     "description": "误触点到式神检查"
+  },
+  {
+    "itemName": "close_download",
+    "imageName": "ss_close_download.png",
+    "roiFront": "413,478,144,64",
+    "roiBack": "413,478,144,64",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "取消下载式神音频"
   }
 ]
