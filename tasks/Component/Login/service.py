@@ -126,8 +126,14 @@ class LoginService(BaseTask, RestartAssets, GameUiAssets):
             return True
         except (GameTooManyClickError, GameStuckError) as e:
             logger.warning(e)
+            logger.info('Retry login once after app restart')
             self.device.app_stop()
             self.device.app_start()
+            try:
+                self._app_handle_login()
+                return True
+            except (GameTooManyClickError, GameStuckError) as e2:
+                logger.warning('Retry login failed: %s', e2)
 
         logger.critical('Login failed')
         logger.critical('Onmyoji server may be under maintenance, or you may lost network connection')
