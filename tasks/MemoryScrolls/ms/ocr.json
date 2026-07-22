@@ -1,8 +1,8 @@
 [
   {
     "itemName": "m_scroll_progress",
-    "roiFront": "401,591,89,27",
-    "roiBack": "401,591,89,27",
+    "roiFront": "420,558,89,27",
+    "roiBack": "421,557,89,27",
     "mode": "Single",
     "method": "Default",
     "keyword": "",
@@ -10,8 +10,8 @@
   },
   {
     "itemName": "m_fragment_nums_s",
-    "roiFront": "334,681,54,28",
-    "roiBack": "334,681,54,28",
+    "roiFront": "743,26,54,28",
+    "roiBack": "743,26,54,28",
     "mode": "Digit",
     "method": "Default",
     "keyword": "",
@@ -19,8 +19,8 @@
   },
   {
     "itemName": "m_fragment_nums_m",
-    "roiFront": "558,681,54,28",
-    "roiBack": "558,681,54,28",
+    "roiFront": "943,27,54,28",
+    "roiBack": "943,27,54,28",
     "mode": "Digit",
     "method": "Default",
     "keyword": "",
@@ -28,8 +28,8 @@
   },
   {
     "itemName": "m_fragment_nums_l",
-    "roiFront": "784,682,54,28",
-    "roiBack": "784,682,54,28",
+    "roiFront": "1137,27,54,28",
+    "roiBack": "1137,27,54,28",
     "mode": "Digit",
     "method": "Default",
     "keyword": "",
