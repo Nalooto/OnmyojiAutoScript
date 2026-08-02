@@ -58,11 +58,8 @@ class ScriptTask(GameUi, MemoryScrollsAssets):
             raise TaskEnd
         # 如果每天只刷小绘卷50，则先检测小绘卷数量
         if self.config.memory_scrolls.memory_scrolls_finish.auto_finish_exploration:
-            if not self.open_small_fragment_page():
-                logger.error('Failed to enter small Memory Scrolls fragment page')
-                self.set_next_run(task='MemoryScrolls', success=False)
-                raise TaskEnd
-
+            self.ui_click(self.I_MS_FRAGMENT_S, self.I_MS_FRAGMENT_S_VERIFICATION, interval=1.5)
+            self.screenshot()  # 再次截图刷新图像帧
             if self.appear(self.I_MS_FRAGMENT_S_50):
                 logger.info('Small Memory Scrolls fragments reached 50, planning tomorrow exploration')
                 self.custom_next_run(task='Exploration', custom_time=self.config.memory_scrolls.memory_scrolls_finish.next_exploration_time, time_delta=1)
