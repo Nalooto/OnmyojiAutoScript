@@ -71,9 +71,7 @@ class ScriptTask(GameUi, MemoryScrollsAssets):
                 self.goto_page(page_main)
                 self.set_next_run(task='MemoryScrolls', success=False)
                 raise TaskEnd
-
-            if not self.close_small_fragment_page():
-                logger.warning('Failed to close small Memory Scrolls fragment page cleanly')
+            self.ui_click_until_smt_disappear(self.I_MS_FRAGMENT_S, stop=self.I_MS_FRAGMENT_S_VERIFICATION, interval=1.5)
         # 进入指定分卷
         self.goto_scroll(con)
         # 返回召唤界面
@@ -144,33 +142,6 @@ class ScriptTask(GameUi, MemoryScrollsAssets):
         self.ui_click_until_disappear(GlobalGameAssets.I_UI_BACK_RED, interval=1)
         logger.info('Closed Memory Scrolls contribution page')
     
-    def close_small_fragment_page(self) -> bool:
-        """
-        关闭小绘卷碎片详情页。
-        """
-        timeout = Timer(10).start()
-        while self.appear(self.I_MS_FRAGMENT_S_VERIFICATION):
-            if timeout.reached():
-                return False
-            if self.appear_then_click(self.I_MS_FRAGMENT_S, interval=1.5):
-                continue
-            self.screenshot()
-            sleep(0.5)
-        return True
-
-    def open_small_fragment_page(self) -> bool:
-        """
-        确认进入小绘卷碎片详情页。
-        """
-        timeout = Timer(10).start()
-        while not timeout.reached():
-            self.screenshot()
-            if self.appear(self.I_MS_FRAGMENT_S_VERIFICATION):
-                return True
-            if self.appear_then_click(self.I_MS_FRAGMENT_S, interval=1.5):
-                continue
-            sleep(0.5)
-        return False
 
     def contribute_memoryscrolls(self):
         """
