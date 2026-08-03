@@ -41,7 +41,7 @@ class DuelAssets:
 	# 名士的星星 
 	I_D_CELEB_STAR = RuleImage(roi_front=(646,450,33,37), roi_back=(551,433,185,67), threshold=0.75, method="Template matching", file="./tasks/Duel/duel/duel_d_celeb_star.png")
 	# 名士专属 
-	I_D_CELEB_HONOR = RuleImage(roi_front=(338,641,25,30), roi_back=(199,606,222,76), threshold=0.75, method="Template matching", file="./tasks/Duel/duel/duel_d_celeb_honor.png")
+	I_D_CELEB_HONOR = RuleImage(roi_front=(294,631,25,21), roi_back=(184,606,222,76), threshold=0.75, method="Template matching", file="./tasks/Duel/duel/duel_d_celeb_honor.png")
 	# 练 
 	I_BATTLE_WITH_TRAIN = RuleImage(roi_front=(1161,588,78,81), roi_back=(1114,547,163,172), threshold=0.8, method="Template matching", file="./tasks/Duel/duel/duel_battle_with_train.png")
 	# 练2 
@@ -57,18 +57,18 @@ class DuelAssets:
 	# ban选界面 
 	I_D_CHECK_BAN = RuleImage(roi_front=(611,36,56,62), roi_back=(590,14,100,100), threshold=0.8, method="Template matching", file="./tasks/Duel/duel/duel_d_check_ban.png")
 	# 斗技荣誉图标 
-	I_DUEL_HONOR = RuleImage(roi_front=(211,636,20,20), roi_back=(200,601,130,100), threshold=0.8, method="Template matching", file="./tasks/Duel/duel/duel_duel_honor.png")
+	I_DUEL_HONOR = RuleImage(roi_front=(185,635,20,20), roi_back=(181,601,130,100), threshold=0.8, method="Template matching", file="./tasks/Duel/duel/duel_duel_honor.png")
 	# 胜利分享 
 	I_D_WIN_SHARE = RuleImage(roi_front=(1123,608,82,73), roi_back=(1123,608,82,73), threshold=0.8, method="Template matching", file="./tasks/Duel/duel/d_win_share.png")
 
 
 	# Ocr Rule Assets
 	# 荣誉 
-	O_D_HONOR = RuleOcr(roi=(233,644,131,31), area=(233,643,131,31), mode="DigitCounter", method="Default", keyword="", name="d_honor")
+	O_D_HONOR = RuleOcr(roi=(204,630,66,23), area=(204,630,66,23), mode="DigitCounter", method="Default", keyword="", name="d_honor")
 	# 分数 
 	O_D_SCORE = RuleOcr(roi=(604,484,108,28), area=(604,484,108,28), mode="DigitCounter", method="Default", keyword="", name="d_score")
 	# 名士星星数 
-	O_D_CELEB_STAR = RuleOcr(roi=(625,454,77,37), area=(625,454,77,37), mode="Digit", method="Default", keyword="", name="d_celeb_star")
+	O_D_CELEB_STAR = RuleOcr(roi=(685,453,82,37), area=(685,453,82,37), mode="Digit", method="Default", keyword="", name="d_celeb_star")
 	# 被办式神名称 
 	O_D_BAN_NAME = RuleOcr(roi=(92,97,82,25), area=(92,97,82,25), mode="Single", method="Default", keyword="", name="d_ban_name")
 
