@@ -41,7 +41,7 @@ class DuelAssets:
 	# 名士的星星 
 	I_D_CELEB_STAR = RuleImage(roi_front=(646,450,33,37), roi_back=(551,433,185,67), threshold=0.75, method="Template matching", file="./tasks/Duel/duel/duel_d_celeb_star.png")
 	# 名士专属 
-	I_D_CELEB_HONOR = RuleImage(roi_front=(294,631,25,21), roi_back=(184,606,222,76), threshold=0.8, method="Template matching", file="./tasks/Duel/duel/duel_d_celeb_honor.png")
+	I_D_CELEB_HONOR = RuleImage(roi_front=(294,631,25,21), roi_back=(184,606,222,76), threshold=0.85, method="Template matching", file="./tasks/Duel/duel/duel_d_celeb_honor.png")
 	# 练 
 	I_BATTLE_WITH_TRAIN = RuleImage(roi_front=(1161,588,78,81), roi_back=(1114,547,163,172), threshold=0.8, method="Template matching", file="./tasks/Duel/duel/duel_battle_with_train.png")
 	# 练2 
