@@ -169,9 +169,9 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets):
             self.screenshot()
             if self.appear(self.I_DT_GW_THANKS):
                 self.ui_click(self.I_DT_GW_THANKS, self.I_DT_GW_THANKED, interval=0.8)
+                timeout_timer.reset()
                 continue
         self.appear_then_click(self.I_UI_BACK_RED)
-
         donate_datas: list = [
             (self.config.daily_trifles.guild_donate.guild_member_list_v,
              lambda : self.switch_select(self.I_DT_GW_GUILD_MEMBER_SELECTED, self.I_DT_GW_FRIEND_SELECTED, self.I_DT_GW_SELECT_GUILD_MEMBER),
@@ -182,17 +182,50 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets):
         ]
         all_done = True
         for name_list, switch_func, name_check in donate_datas:
-            all_done = all_done and self.process_donate(name_list, switch_func, name_check)
+            all_done = all_done and self.donate(name_list, switch_func, name_check)
+        if self.config.daily_trifles.guild_donate.auto_get_rewards:
+            self.guild_donate_get_reward()
         self.config.daily_trifles.done_record.guild_donate_finish = all_done
         self.goto_page(page_main)
 
-    def process_donate(self, name_list: List[str], switch_func: Callable, name_check: bool) -> bool:
+    def guild_donate_get_reward(self):
+        """领取捐赠碎片的奖励"""
+        timeout_timer = Timer(3).start()
+        has_reward = False
+        while not timeout_timer.reached():
+            self.screenshot()
+            if self.appear(self.I_UI_BACK_RED, interval=0.6):
+                break
+            if self.appear(self.I_DT_GW_DONATE_RECORD_RED):
+                self.ui_click(self.I_DT_GW_DONATE_RECORD, self.I_UI_BACK_RED, interval=1.2)
+                has_reward = True
+                continue
+        if not has_reward:
+            logger.info('No reward can get, exit')
+            return
+        timeout_timer.reset()
+        while not timeout_timer.reached():
+            self.screenshot()
+            self.ui_reward_appear_click()
+            if self.appear_then_click(self.I_UI_CONFIRM, interval=0.6):
+                continue
+            if self.appear_then_click(self.I_DT_GW_DONATE_RECORD_THANKS, interval=1.5):  # 受赠界面的一键感谢
+                timeout_timer.reset()
+                continue
+            if self.appear(self.I_DT_GW_DONATE_RED, interval=2.5):  # 赠予界面的一键领取
+                self.ui_click(self.I_DT_GW_GIVE, self.I_DT_GW_ONE_COLLECT)
+                self.appear_then_click(self.I_DT_GW_ONE_COLLECT, interval=0.6)
+                timeout_timer.reset()
+                continue
+        self.ui_click_until_disappear(self.I_UI_BACK_RED)
+
+    def donate(self, name_list: List[str], switch_func: Callable, name_check: bool) -> bool:
         """执行碎片捐赠流程
 
         :param name_list: 待捐赠碎皮的名称列表
         :param switch_func: 切换好友/阴阳寮/...的方法
         :param name_check: 是否使用ocr检查用户名
-        :return: 是否全部捐赠成功 (出现检索名称后为空或者碎皮不足都是False, 仅有已捐满才是True)
+        :return: 是否全部捐赠成功 (出现检索名称后为空或者碎皮不足都是False, 仅全部捐成功才是True)
         """
         all_done = True
         for name in name_list:
@@ -203,7 +236,9 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets):
             self.appear_then_click(self.I_DT_GW_CLEAR_SEARCH)  # 清除搜索框内容
             self.ui_click(self.C_DT_GW_INPUT_SEARCH, self.I_DT_GW_CONFIRM, interval=1.5)  # 点击搜索框
             self.click(self.C_DT_GW_CLICK_INPUT)  # 点击名称输入框
-            self.device.adb.send_keys(name)  # 输入名称
+            # uiautomator2 通过 FastInputIME 传输 UTF-8 文本，并在必要时回退到 set_text
+            logger.info(f'Inputting name using uiautomator2: {name}, waiting start and send')
+            self.device.u2.send_keys(name, clear=True)
             self.ui_click_until_disappear(self.I_DT_GW_CONFIRM, interval=1.5)  # 点击确定
             donate_btn = self.I_DT_GW_DONATE
             if name_check:  # 若有多个相同前缀名称, 则需要取出一样的或最相近的名称
@@ -217,13 +252,14 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets):
                                        max(name_roi[3] + 60, 720)]
             self.I_DT_GW_FULL.roi_back = donate_btn.roi_back  # 设置已捐满标志back区域和赠与按钮同一行
             self.I_DT_GW_INSUFFICIENT.roi_back = donate_btn.roi_back  # 设置碎片不足标志back区域和赠与按钮同一行
-            donate_ret = self.donate(donate_btn)
+            donate_ret = self.process_donate(donate_btn, name)
             all_done = all_done and donate_ret  # 有一次没成功则all_done永远False
         return all_done
 
-    def donate(self, donate_btn: RuleImage) -> bool:
+    def process_donate(self, donate_btn: RuleImage, name: str) -> bool:
         """捐赠式神碎片
 
+        :param name: 被捐方名称
         :param donate_btn: 赠与按钮
         :return: 捐赠是否成功
         """
@@ -234,13 +270,18 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets):
                 continue
             if self.appear(self.I_DT_GW_SEARCH_EMPTY):
                 logger.warning('Maybe not wish or not find, skip')
+                if self.config.daily_trifles.guild_donate.notify_enable:
+                    self.config.notifier.push(title='好友搜索失败', content=f'{name} 搜索失败, 没有搜索到对应用户, 无法捐赠')
                 return False
-            if self.appear_then_click(donate_btn, interval=0.6):
+            if self.appear_then_click(donate_btn, interval=1.5):
+                timeout_timer.reset()
                 continue
             if self.appear(self.I_DT_GW_INSUFFICIENT, interval=0.6):
                 logger.warning('Not enough fragment to donate, skip')
+                if self.config.daily_trifles.guild_donate.notify_enable:
+                    self.config.notifier.push(title='捐赠碎片不足', content=f'捐给{name}的碎片不足, 请上线查看')
                 return False
-            if self.appear(self.I_DT_GW_FULL, interval=1.2):
+            if self.appear(self.I_DT_GW_FULL, interval=0.6):
                 logger.info(f'Donate success!')
                 return True
         return False
@@ -256,6 +297,8 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets):
         while not timeout_timer.reached():
             self.screenshot()
             if self.appear(self.I_DT_GW_SEARCH_EMPTY):  # 空的直接退出
+                if self.config.daily_trifles.guild_donate.notify_enable:
+                    self.config.notifier.push(title='好友搜索失败', content=f'没有搜索到对应用户 {name}, 无法捐赠')
                 return None
             text_results = self.O_DT_GW_NAME.detect_and_ocr(self.device.image)
             mx_similarity = 0.5
