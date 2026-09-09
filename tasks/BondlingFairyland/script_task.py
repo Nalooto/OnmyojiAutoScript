@@ -74,6 +74,20 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
         context.is_win = is_win
         return ret
 
+    def click_fire(self):
+        # 队友进房后、点开始挑战前, 采样房间锁定状态(契灵锁定后系统会自动开战)
+        self.screenshot()
+        self._room_locked = self.is_in_room(False) and \
+            bool(self.appear(self.I_LOCK)) and not bool(self.appear(self.I_UNLOCK))
+        logger.info(f'Bondling room locked: {self._room_locked}')
+        return super().click_fire()
+
+    def _prepare_click_ready(self, context: BattleContext, config: GeneralBattleConfig) -> bool:
+        # 已锁定则跳过准备按钮点击(避免误匹配点到右侧式神), 等系统自动开战
+        if getattr(self, '_room_locked', False):
+            return False
+        return super()._prepare_click_ready(context, config)
+
     def run(self):
         cong = self.config.bondling_fairyland
 
@@ -167,10 +181,13 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
                         continue
                     if self.check_and_invite(True):
                         continue
+                    # 某些活动的时候出现 “选择共鸣的阴阳师”
+                    if self.appear_then_click(self.I_UI_CONFIRM, interval=1):
+                        continue
                     # 只有不在房间内，才识别创建队伍按钮，提高阈值防误触
                     if room_confirm_count == 0 and self.appear(self.I_CREATE_TEAM, interval=1.5, threshold=0.85):
                         logger.info('检测到创建队伍按钮，开始创建房间')
-                        self.ensure_private()
+                        self.ensure_private(room_mark=self.I_GI_IN_ROOM)
                         if self.appear_then_click(self.I_CREATE_TEAM, interval=2):
                             sleep(1.5)
                             click_count += 1
@@ -293,6 +310,9 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
 
             if self.is_in_room(False):
                 logger.info("契灵：已经在组队房间中")
+                # 开战前采样锁定状态(锁定后全员自动准备, 准备页可跳过点击)
+                self._room_locked = bool(self.appear(self.I_LOCK)) and not bool(self.appear(self.I_UNLOCK))
+                logger.info(f'Bondling room locked: {self._room_locked}')
                 if self.wait_battle(wait_time=self.config.bondling_fairyland.invite_config.wait_time):
                     self.run_general_battle(self.config.bondling_fairyland.battle_config)
                     wait_timer.reset()
