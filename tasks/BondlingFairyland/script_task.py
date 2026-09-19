@@ -187,7 +187,7 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
                     # 只有不在房间内，才识别创建队伍按钮，提高阈值防误触
                     if room_confirm_count == 0 and self.appear(self.I_CREATE_TEAM, interval=1.5, threshold=0.85):
                         logger.info('检测到创建队伍按钮，开始创建房间')
-                        self.ensure_private(room_mark=self.I_GI_IN_ROOM)
+                        self.ensure_private()
                         if self.appear_then_click(self.I_CREATE_TEAM, interval=2):
                             sleep(1.5)
                             click_count += 1
