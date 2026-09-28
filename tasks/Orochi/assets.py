@@ -33,6 +33,8 @@ class OrochiAssets:
 	I_OROCHI_CHECK_12 = RuleImage(roi_front=(929,116,100,46), roi_back=(896,100,269,84), threshold=0.8, method="Template matching", file="./tasks/Orochi/o/o_orochi_check_12.png")
 	# 虚无大蛇标志 
 	I_OROCHI_CHECK_13 = RuleImage(roi_front=(929,121,211,41), roi_back=(896,100,269,84), threshold=0.8, method="Template matching", file="./tasks/Orochi/o/o_orochi_check_13.png")
+	# 检测御魂自选活动弹窗 
+	I_OROCHI_SELECT_SOUL = RuleImage(roi_front=(1109,128,46,39), roi_back=(1082,101,106,92), threshold=0.8, method="Template matching", file="./tasks/Orochi/o/o_orochi_select_soul.png")
 
 
 	# List Rule Assets

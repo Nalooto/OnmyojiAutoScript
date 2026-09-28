@@ -97,5 +97,14 @@
     "method": "Template matching",
     "threshold": 0.8,
     "description": "虚无大蛇标志"
+  },
+  {
+    "itemName": "orochi_select_soul",
+    "imageName": "o_orochi_select_soul.png",
+    "roiFront": "1109,128,46,39",
+    "roiBack": "1082,101,106,92",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "检测御魂自选活动弹窗"
   }
 ]
