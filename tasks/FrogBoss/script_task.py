@@ -20,6 +20,11 @@ from tasks.Component.GeneralBattle.assets import GeneralBattleAssets
 from tasks.Component.config_base import TimeDelta
 from tasks.FrogBoss.assets import FrogBossAssets
 from tasks.FrogBoss.config import Strategy
+from tasks.FrogBoss.frog_dashen import (
+    NoDashenPredictionError,
+    fetch_follow_decision,
+    retry_time_before_round_end,
+)
 from tasks.FrogBoss.frog_oas import OasHistory, fetch_predictions, fingerprint
 
 
@@ -131,6 +136,40 @@ class ScriptTask(RightActivity, FrogBossAssets, GeneralBattleAssets):
                 click_image = self.I_BET_LEFT if count_left > count_right else self.I_BET_RIGHT
             case Strategy.Dashen:
                 click_image = self.get_dashen(count_left, count_right)
+            case Strategy.DashenFollow:
+                signature = fingerprint(self.device.image)
+                try:
+                    decision = fetch_follow_decision(
+                        self.config.model.frog_boss.frog_boss_config.dashen_follow_uids)
+                except NoDashenPredictionError as exc:
+                    now = datetime.now()
+                    retry_time = retry_time_before_round_end(now)
+                    if retry_time is not None:
+                        logger.info(f'{exc}; retry FrogBoss at {retry_time}')
+                        self.set_next_run(task='FrogBoss', server=False, target=retry_time)
+                        raise TaskEnd('FrogBoss')
+
+                    logger.warning(f'{exc}; less than 15 minutes remain, falling back to majority')
+                    self.screenshot()
+                    from tasks.FrogBoss.frog_oas import same_lineup
+                    if not same_lineup(signature, fingerprint(self.device.image)):
+                        raise GameStuckError('FrogBoss lineup changed before majority fallback')
+                    if not (self.appear(self.I_BET_LEFT) and self.appear(self.I_BET_RIGHT)):
+                        raise GameStuckError('FrogBoss betting closed before majority fallback')
+                    count_left = self.O_LEFT_COUNT.ocr(self.device.image)
+                    count_right = self.O_RIGHT_COUNT.ocr(self.device.image)
+                    click_image = self.I_BET_LEFT if count_left > count_right else self.I_BET_RIGHT
+                except ValueError as exc:
+                    raise GameStuckError(str(exc)) from exc
+                else:
+                    logger.info(f'frog_dashen_follow decision: {decision}')
+                    self.screenshot()
+                    from tasks.FrogBoss.frog_oas import same_lineup
+                    if not same_lineup(signature, fingerprint(self.device.image)):
+                        raise GameStuckError('FrogBoss lineup changed while fetching Dashen predictions')
+                    if not (self.appear(self.I_BET_LEFT) and self.appear(self.I_BET_RIGHT)):
+                        raise GameStuckError('FrogBoss betting closed while fetching Dashen predictions')
+                    click_image = self.I_BET_LEFT if decision['side'] == 'LEFT' else self.I_BET_RIGHT
             case Strategy.Oas:
                 signature = fingerprint(self.device.image)
                 predictions = fetch_predictions(self.oas_history)
@@ -304,7 +343,8 @@ class ScriptTask(RightActivity, FrogBossAssets, GeneralBattleAssets):
             {"name": "CC南浔", "id": "74db771d92a54c28ae3e98d19aa565a3"},
             {"name": "冰七喜Den", "id": "e498e524252041e29999b38e57c4df1d"},
             {"name": "行水姑娘", "id": "30b0c2923faa483f95572c324a5bc910"},
-            {"name": "更慕林", "id": "e32aedbdd8da46a5b5b497a16c4b7658"}
+            {"name": "更慕林", "id": "e32aedbdd8da46a5b5b497a16c4b7658"},
+            {"name": "二蛋搬砖", "id": "3efc40a0a9754bd0922c3d75752beaf4"},
             # ... 可以添加更多 uid
         ]
 
