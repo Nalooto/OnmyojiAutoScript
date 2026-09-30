@@ -8,6 +8,7 @@ from unittest.mock import patch
 from tasks.FrogBoss.frog_dashen import (
     FEED_DETAIL_URL,
     FEED_LIST_URL,
+    _feed_body,
     fetch_follow_decision,
     is_current_round,
     parse_side,
@@ -29,6 +30,13 @@ class DashenFollowTests(unittest.TestCase):
         self.assertEqual(parse_side('本轮建议压蓝'), 'RIGHT')
         self.assertIsNone(parse_side('竞猜内容仅供参考'))
         self.assertIsNone(parse_side('建议押红，不要压蓝'))
+
+    def test_feed_title_direction_is_included_in_parsed_content(self):
+        detail = {'result': {'feed': {'content': json.dumps({'body': {
+            'title': '18：00场 右 最快对弈竞猜',
+            'text': '#对弈竞猜#',
+        }})}}}
+        self.assertEqual(parse_side(_feed_body(detail)), 'RIGHT')
 
     def test_current_round_requires_same_day_and_two_hour_slot(self):
         now = datetime(2026, 9, 30, 12, 31)

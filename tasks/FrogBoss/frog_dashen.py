@@ -102,7 +102,7 @@ def _feed_body(detail: dict) -> str:
     content = detail['result']['feed']['content']
     content_data = json.loads(content) if isinstance(content, str) else content
     body = content_data.get('body', {})
-    return body.get('text', '') or ''
+    return ' '.join(part for part in (body.get('title', ''), body.get('text', '')) if part)
 
 
 def fetch_follow_decision(uids_value: str, now: datetime | None = None) -> dict:
