@@ -439,8 +439,6 @@ class Script:
         if command == 'start' or command == 'goto_main':
             logger.error(f'Invalid command `{command}`')
 
-        if command == 'Restart':
-            self._ensure_restart_enabled()
         self._reset_task_runtime_outcome()
         try:
             self.device.screenshot()
@@ -554,33 +552,7 @@ class Script:
             else:
                 break
 
-    def _ensure_restart_enabled(self) -> None:
-        """所有重启入口均尊重任务启用开关，禁止绕过用户配置。"""
-        if self.config.model.restart.scheduler.enable:
-            return
-        self._error_restart_pending = False
-        logger.critical('Restart task is disabled; stop script instead of restarting game')
-        self.config.notifier.push(
-            title='Restart',
-            content=f'<{self.config_name}> 重启任务未启用，无法自动恢复，脚本已停止，请手动处理',
-        )
-        raise SystemExit(1)
 
-    def _request_error_restart(self, command: str) -> None:
-        """按重启任务配置限制本次脚本运行的异常重启次数，强制优先调度。"""
-        self._ensure_restart_enabled()
-        limit = self.config.model.restart.restart_config.error_restart_limit
-        if self._error_restart_count >= limit:
-            logger.critical(f'Error restart limit reached ({self._error_restart_count}/{limit}): {command}; stop script')
-            self.config.notifier.push(
-                title=f'{I18n.trans_zh_cn(command)}{command}',
-                content=f'<{self.config_name}> 异常重启次数已达上限 {limit} 次，脚本已停止，请上线查看',
-            )
-            raise SystemExit(1)
-        self._error_restart_count += 1
-        logger.warning(f'Error recovery restart {self._error_restart_count}/{limit}: {command}')
-        self._error_restart_pending = True
-        self.config.task_call('Restart', force_call=False)
 
     def _handle_task_exception(self, e: Exception, command: str) -> bool:
         """
