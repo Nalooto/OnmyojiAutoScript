@@ -288,7 +288,8 @@ class ScriptTask(RightActivity, FrogBossAssets, GeneralBattleAssets):
                     create_time = data['result']['feed']['createTime']
                     content_json = data['result']['feed']['content']
                     content_data = json.loads(content_json)
-                    body_text = content_data['body']['text']
+                    body = content_data.get('body', {})
+                    body_text = ' '.join(part for part in (body.get('title', ''), body.get('text', '')) if part)
                     return {
                         'user_nick': user_nick,
                         'create_time': create_time,
