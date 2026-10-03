@@ -1,6 +1,7 @@
 # This Python file uses the following encoding: utf-8
 # @author runhey
 # github https://github.com/runhey
+import random
 from datetime import timedelta, time, datetime
 from time import sleep
 
@@ -13,7 +14,7 @@ from cached_property import cached_property
 from module.atom.image import RuleImage
 from module.atom.ocr import RuleOcr
 from module.base.timer import Timer
-from module.exception import TaskEnd
+from module.exception import GameStuckError, TaskEnd
 from module.image.recipes import match_highlight_rule
 from module.logger import logger
 from tasks.Component.Costume.config import MainType
@@ -342,6 +343,15 @@ class ScriptTask(WQExplore, SecretScriptTask, WantedQuestsAssets):
         wq_config = GeneralBattleConfig(lock_team_enable=True)
         self.run_general_battle(config=wq_config, exit_matcher=self.I_WQC_FIRE)
 
+    def _click_secret_chat(self, click_count: int) -> int:
+        self.click(self.C_SECRET_CHAT, interval=0.8)
+        click_count += 1
+        if click_count >= 6:
+            logger.warning('Secret mission chat too long, force to close')
+            click_count = 0
+            self.device.click_record_clear()
+        return click_count
+
     def secret(self, goto, num=1):
         self.ui_click(goto, self.I_WQSE_FIRE)
         for i in range(num):
@@ -356,16 +366,20 @@ class ScriptTask(WQExplore, SecretScriptTask, WantedQuestsAssets):
                 self.screenshot()
                 if self.get_current_page() in [page_battle_prepare, page_battle]:
                     self.run_general_battle(self.battle_config, exit_matcher=any_of(self.I_UI_BACK_RED, self.I_WQSE_SPECIAL_FIRE))
+                    return_timer = Timer(10).start()
+                    click_count = 0
+                    while not return_timer.reached():
+                        self.screenshot()
+                        if self.appear(self.I_WQSE_FIRE) or self.appear(self.I_WQSE_SPECIAL_FIRE):
+                            break
+                        click_count = self._click_secret_chat(click_count)
+                    else:
+                        raise GameStuckError('Secret battle ended but challenge screen did not appear')
                     break
                 if self.appear_then_click(self.I_WQSE_FIRE, interval=1):
                     continue
                 if self.appear(self.I_UI_BACK_RED, threshold=0.7) and not self.appear(self.I_WQSE_FIRE):
-                    self.click(self.C_SECRET_CHAT, interval=0.8)
-                    click_count += 1
-                    if click_count >= 6:
-                        logger.warning('Secret mission chat too long, force to close')
-                        click_count = 0
-                        self.device.click_record_clear()
+                    click_count = self._click_secret_chat(click_count)
         logger.info('Secret mission finished')
 
     def invite_random(self, add_button: RuleImage):
@@ -449,6 +463,9 @@ class ScriptTask(WQExplore, SecretScriptTask, WantedQuestsAssets):
                 sleep(20) if index < 5 else sleep(0)
                 # NOTE 等待过程如果出现协作邀请 将会卡住 为了防止卡住
                 self.screenshot()
+            if not item['inviteResult']:
+                logger.warning("%s not found after retries, invite random friends", name)
+                item['inviteResult'] = self.cooperation_invite_random(item['inviteBtn'])
             # 邀请追踪一起吧,只有邀请成功才追踪
             if item['inviteResult']:
                 self.invite_success_callback(item['type'], name)
@@ -456,6 +473,35 @@ class ScriptTask(WQExplore, SecretScriptTask, WantedQuestsAssets):
                     logger.info("start trace_one")
                     self.trace_one(item['inviteBtn'])
         return ret
+
+    def cooperation_invite_random(self, btn: RuleImage) -> bool:
+        """目标好友多次搜索失败后，随机选择最多五个可见好友。"""
+        self.ui_click(btn, stop=self.I_WQ_INVITE_ENSURE, interval=2.5)
+        if not self.wait_until_appear(self.I_WQ_INVITE_FRIEND_LIST_APPEAR, wait_time=4):
+            logger.warning("Friend list did not load for random invite")
+            self.ui_click_until_disappear(self.I_WQ_INVITE_CANCEL, interval=1.5)
+            return False
+
+        friend_slots = [
+            self.I_WQ_FRIEND_1,
+            self.I_WQ_FRIEND_2,
+            self.I_WQ_FRIEND_3,
+            self.I_WQ_FRIEND_4,
+            self.I_WQ_FRIEND_5,
+        ]
+        random.shuffle(friend_slots)
+        for friend_slot in friend_slots[:5]:
+            self.click(friend_slot)
+            sleep(0.4)
+
+        self.screenshot()
+        if not self.appear(self.I_WQ_INVITE_SELECTED):
+            logger.warning("No friend selected for random invite")
+            self.ui_click_until_disappear(self.I_WQ_INVITE_CANCEL, interval=1.5)
+            return False
+
+        self.ui_click_until_disappear(self.I_WQ_INVITE_ENSURE, interval=1)
+        return True
 
     def cooperation_invite(self, btn: RuleImage, name: str):
         """
@@ -471,6 +517,7 @@ class ScriptTask(WQExplore, SecretScriptTask, WantedQuestsAssets):
         self.O_WQ_INVITE_COLUMN_2.keyword = name
 
         find = False
+        diff_svr_checked = False
         for i in range(2):
             self.wait_until_appear(self.I_WQ_INVITE_FRIEND_LIST_APPEAR, wait_time=4)
             self.screenshot()
@@ -485,14 +532,12 @@ class ScriptTask(WQExplore, SecretScriptTask, WantedQuestsAssets):
                     break
                 # TODO OCR识别到文字 但是没有选中 尝试重新选择  (选择好友时,弹出协作邀请导致选择好友失败)
             # 检测跨服好友按钮是否高亮
-            while 1:
-                self.screenshot()
+            if not diff_svr_checked:
                 if not self.appear_highlight(self.I_WQ_INVITE_DIFF_SVR_HIGHLIGHT):
                     self.click(self.I_WQ_INVITE_DIFF_SVR)
-                    continue
-                break
-            # 等待好友列表加载
-            self.wait_until_appear(self.I_WQ_INVITE_DIFF_SVR_HIGHLIGHT, wait_time=4)
+                diff_svr_checked = True
+                # 等待跨服好友列表加载；识别失败时由下一轮搜索后正常退出
+                self.wait_until_appear(self.I_WQ_INVITE_DIFF_SVR_HIGHLIGHT, wait_time=4)
         # 没有找到需要邀请的人,点击取消 返回悬赏封印界面
         if not find:
             self.screenshot()
