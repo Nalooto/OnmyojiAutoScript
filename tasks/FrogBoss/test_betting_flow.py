@@ -90,6 +90,20 @@ class BettingFlowTests(unittest.TestCase):
                 task.confirm_bet()
                 self.assertEqual(task.clicks, [])
 
+    def test_transient_rest_frame_does_not_confirm_rest(self):
+        task = BettingTask([
+            {ScriptTask.I_FROG_BOSS_REST.name},
+            {ScriptTask.I_BET_LEFT.name, ScriptTask.I_BET_RIGHT.name},
+        ])
+        task.screenshot()
+        self.assertFalse(task.confirm_frog_boss_rest())
+        self.assertIn(ScriptTask.I_BET_LEFT.name, task.visible)
+
+    def test_persistent_rest_frame_is_confirmed(self):
+        task = BettingTask([{ScriptTask.I_FROG_BOSS_REST.name}])
+        task.screenshot()
+        self.assertTrue(task.confirm_frog_boss_rest())
+
 
 if __name__ == '__main__':
     unittest.main()

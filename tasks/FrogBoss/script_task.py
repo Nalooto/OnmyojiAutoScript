@@ -64,8 +64,10 @@ class ScriptTask(RightActivity, FrogBossAssets, GeneralBattleAssets):
                 break
             # 休息中
             if self.appear(self.I_FROG_BOSS_REST):
-                logger.info('Frog Boss Rest')
-                break
+                if self.confirm_frog_boss_rest():
+                    logger.info('Frog Boss Rest')
+                    break
+                continue
             # 竞猜成功
             if self.appear(self.I_BET_SUCCESS):
                 logger.info('You bet win')
@@ -97,6 +99,15 @@ class ScriptTask(RightActivity, FrogBossAssets, GeneralBattleAssets):
         logger.info('FrogBoss end')
         self.next_run()
         raise TaskEnd('FrogBoss')
+
+    def confirm_frog_boss_rest(self) -> bool:
+        stable_timer = Timer(0.8).start()
+        while True:
+            self.screenshot()
+            if not self.appear(self.I_FROG_BOSS_REST):
+                return False
+            if stable_timer.reached():
+                return True
 
     def next_run(self):
         time = self.config.model.frog_boss.frog_boss_config.before_end_frog
