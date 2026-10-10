@@ -181,9 +181,6 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
                         continue
                     if self.check_and_invite(True):
                         continue
-                    # 某些活动的时候出现 “选择共鸣的阴阳师”
-                    if self.appear_then_click(self.I_UI_CONFIRM, interval=1):
-                        continue
                     # 只有不在房间内，才识别创建队伍按钮，提高阈值防误触
                     if room_confirm_count == 0 and self.appear(self.I_CREATE_TEAM, interval=1.5, threshold=0.85):
                         logger.info('检测到创建队伍按钮，开始创建房间')
