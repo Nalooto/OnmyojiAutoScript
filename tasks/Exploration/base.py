@@ -117,6 +117,8 @@ class BaseExploration(GameUi, GeneralBattle, GeneralRoom, GeneralInvite, Replace
     # 打开指定的章节：
     def open_expect_level(self):
         swipeCount = 0
+        ocr_miss_count = 0
+        max_ocr_misses = 5
         config_exploration_level = self.config.exploration.exploration_config.exploration_level
         while True:
             # 判断有无目标章节
@@ -140,6 +142,21 @@ class BaseExploration(GameUi, GeneralBattle, GeneralRoom, GeneralInvite, Replace
                 continue
             if self.appear_then_click(self.I_UI_CONFIRM_SAMLL, interval=1):
                 continue
+            if not exp_level_enum_list:
+                ocr_miss_count += 1
+                logger.warning(
+                    f'Unable to recognize exploration chapter names '
+                    f'({ocr_miss_count}/{max_ocr_misses}); retrying without swiping'
+                )
+                if ocr_miss_count >= max_ocr_misses:
+                    raise GameStuckError(
+                        f'Unable to recognize exploration chapter names after {max_ocr_misses} attempts; '
+                        'confirm the chapter selection is open and the list is unobstructed'
+                    )
+                self.device.click_record_clear()
+                time.sleep(1)
+                continue
+            ocr_miss_count = 0
             self.device.click_record_clear()
             if len(exp_level_enum_list) > 0:
                 min_level = exp_level_enum_list[0]
