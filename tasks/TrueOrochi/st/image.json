@@ -20,8 +20,8 @@
   {
     "itemName": "st_fire_confirm",
     "imageName": "st_st_fire_confirm.png",
-    "roiFront": "671,406,176,53",
-    "roiBack": "671,406,176,53",
+    "roiFront": "666,412,176,53",
+    "roiBack": "666,412,176,53",
     "method": "Template matching",
     "threshold": 0.8,
     "description": "确认挑战"
@@ -110,8 +110,8 @@
   {
     "itemName": "st_create_room",
     "imageName": "st_st_create_room.png",
-    "roiFront": "528,482,223,62",
-    "roiBack": "528,482,223,62",
+    "roiFront": "589,485,157,58",
+    "roiBack": "589,485,157,58",
     "method": "Template matching",
     "threshold": 0.8,
     "description": "60体力创建"
