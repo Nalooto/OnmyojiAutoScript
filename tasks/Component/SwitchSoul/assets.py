@@ -43,7 +43,7 @@ class SwitchSoulAssets:
 	# description 
 	I_SOU_SWITCH_4 = RuleImage(roi_front=(978,603,25,22), roi_back=(962,592,53,34), threshold=0.8, method="Template matching", file="./tasks/Component/SwitchSoul/ss/ss_sou_switch_4.png")
 	# description 
-	I_SOU_SWITCH_SURE = RuleImage(roi_front=(668,401,180,61), roi_back=(668,401,180,61), threshold=0.8, method="Template matching", file="./tasks/Component/SwitchSoul/ss/ss_sou_switch_sure.png")
+	I_SOU_SWITCH_SURE = RuleImage(roi_front=(663,410,180,61), roi_back=(663,410,180,61), threshold=0.8, method="Template matching", file="./tasks/Component/SwitchSoul/ss/ss_sou_switch_sure.png")
 	# 用于判断是否在式神录里面 
 	I_SOU_CHECK_IN = RuleImage(roi_front=(269,69,50,49), roi_back=(269,69,50,49), threshold=0.8, method="Template matching", file="./tasks/Component/SwitchSoul/ss/ss_sou_check_in.png")
 	# description 
@@ -65,9 +65,9 @@ class SwitchSoulAssets:
 	# 需要切换的预设按钮(颜色深一点) 
 	I_SOU_CLICK_PRESENT = RuleImage(roi_front=(978,304,25,26), roi_back=(965,142,48,480), threshold=0.9, method="Template matching", file="./tasks/Component/SwitchSoul/ss/ss_sou_click_present.png")
 	# 误触点到式神检查 
-	I_CHECK_BLOCK = RuleImage(roi_front=(572,408,137,49), roi_back=(572,408,137,49), threshold=0.8, method="Template matching", file="./tasks/Component/SwitchSoul/ss/ss_check_block.png")
+	I_CHECK_BLOCK = RuleImage(roi_front=(573,406,134,66), roi_back=(573,406,134,66), threshold=0.8, method="Template matching", file="./tasks/Component/SwitchSoul/ss/ss_check_block.png")
 	# 取消下载式神音频 
-	I_CLOSE_DOWNLOAD = RuleImage(roi_front=(413,478,144,64), roi_back=(413,478,144,64), threshold=0.8, method="Template matching", file="./tasks/Component/SwitchSoul/ss/ss_close_download.png")
+	I_CLOSE_DOWNLOAD = RuleImage(roi_front=(419,478,135,63), roi_back=(413,478,144,64), threshold=0.8, method="Template matching", file="./tasks/Component/SwitchSoul/ss/ss_close_download.png")
 
 
 	# Ocr Rule Assets
