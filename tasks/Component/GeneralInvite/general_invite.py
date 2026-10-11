@@ -626,6 +626,7 @@ class GeneralInvite(BaseTask, GeneralInviteAssets):
                     if self.appear(self.I_I_DEFAULT):
                         break
                     if self.appear_then_click(self.I_I_NO_DEFAULT, interval=1):
+                        sleep(0.8)
                         continue
         # 点击确认
         while 1:
@@ -656,6 +657,7 @@ class GeneralInvite(BaseTask, GeneralInviteAssets):
             if self.appear(GeneralBattleAssets.I_EXIT):
                 return False
             if self.appear_then_click(self.I_I_NO_DEFAULT, interval=1):
+                sleep(0.8)
                 continue
             if self.appear_then_click(self.I_GI_SURE, interval=1):
                 continue
