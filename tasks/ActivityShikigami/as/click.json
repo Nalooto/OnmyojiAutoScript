@@ -28,5 +28,11 @@
     "roiFront": "42,94,1207,543",
     "roiBack": "42,94,1207,543",
     "description": "description"
+  },
+  {
+    "itemName": "map_to_pass",
+    "roiFront": "681,321,27,34",
+    "roiBack": "674,313,41,48",
+    "description": "战场地图门票爬塔头像固定点击区域"
   }
 ]

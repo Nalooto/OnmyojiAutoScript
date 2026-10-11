@@ -14,26 +14,9 @@ class NormalClimbAct(BaseAct):
 
     def before_run(self):
         super().before_run()
-        page_act = self.navigator.resolve_page(pages.page_act)
         page_act_pass = self.navigator.resolve_page(pages.page_act_pass)
         page_act_ap = self.navigator.resolve_page(pages.page_act_ap)
-        page_act_map = self.navigator.resolve_page(pages.page_act_map)
-        flag = pages.special_act_Flag
 
-        if flag:
-            # 体力爬塔和中转界面关联
-            page_act_map.connect(
-                page_act_ap,
-                ActivityShikigamiAssets.I_MAP_GOTO_BATTLE,
-                key="page_act_map->page_act_ap",
-            )
-        else:
-            # 体力爬塔和主界面关联
-            page_act.connect(
-                page_act_ap,
-                ActivityShikigamiAssets.I_TO_BATTLE_MAIN,
-                key="page_act->page_act_ap",
-            )
         # 体力爬塔进入是门票则切换
         page_act_ap.add_enter_failure_hooks(
             pages.conditional_action(
@@ -41,20 +24,7 @@ class NormalClimbAct(BaseAct):
                 action=ActivityShikigamiAssets.I_CLIMB_MODE_SWITCH,
             )
         )
-        if flag:
-            # 门票爬塔和中转界面关联
-            page_act_map.connect(
-                page_act_pass,
-                ActivityShikigamiAssets.I_MAP_GOTO_BATTLE,
-                key="page_act_map->page_act_pass",
-            )
-        else:
-            # 门票爬塔和主界面关联
-            page_act.connect(
-                page_act_pass,
-                ActivityShikigamiAssets.I_TO_BATTLE_MAIN,
-                key="page_act->page_act_pass",
-            )
+
         # 门票爬塔进入是体力则切换
         page_act_pass.add_enter_failure_hooks(
             pages.conditional_action(
@@ -77,15 +47,22 @@ class NormalClimbAct(BaseAct):
     def lock_team(self, battle_conf: GeneralBattleConfig):
         enable = battle_conf.lock_team_enable
         match self.climb_type:
-            case "boss":
+            case "pass":
                 lock_rule = self.I_LOCK
                 unlock_rule = self.I_UNLOCK
-            case _:
+            case "ap":
                 lock_rule = self.I_AP_LOCK
                 unlock_rule = self.I_AP_UNLOCK
+            case "ap100":
+                lock_rule = self.I_AP100_LOCK
+                unlock_rule = self.I_AP100_UNLOCK
+            case _:
+                lock_rule = self.I_LOCK
+                unlock_rule = self.I_UNLOCK
+                
         if enable:
             logger.info(f"Lock {self.climb_type} team")
-            self.ui_click(unlock_rule, stop=lock_rule, interval=1.5)
+            self._set_team_lock_state(unlock_rule, lock_rule, "lock")
             return
         logger.info(f"Unlock {self.climb_type} team")
-        self.ui_click(lock_rule, stop=unlock_rule, interval=1.5)
+        self._set_team_lock_state(lock_rule, unlock_rule, "unlock")

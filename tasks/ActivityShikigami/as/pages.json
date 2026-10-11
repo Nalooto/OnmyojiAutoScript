@@ -47,7 +47,7 @@
   {
     "itemName": "battle_main_to_records",
     "imageName": "as_battle_main_to_records.png",
-    "roiFront": "999,560,39,42",
+    "roiFront": "1015,560,39,42",
     "roiBack": "674,539,439,157",
     "method": "Template matching",
     "threshold": 0.8,
@@ -133,5 +133,68 @@
     "method": "Template matching",
     "threshold": 0.8,
     "description": "活动中转界面进入战斗界面"
+  },
+  {
+    "itemName": "activity_main_mark",
+    "imageName": "as_activity_main_mark.png",
+    "roiFront": "148,17,140,42",
+    "roiBack": "130,5,176,66",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "当期爬塔活动主页标题"
+  },
+  {
+    "itemName": "battle_map_mark",
+    "imageName": "as_battle_map_mark.png",
+    "roiFront": "590,0,150,42",
+    "roiBack": "570,0,190,68",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "当期爬塔战场地图标题"
+  },
+  {
+    "itemName": "main_to_ap",
+    "imageName": "as_main_to_ap.png",
+    "roiFront": "213,255,132,65",
+    "roiBack": "190,235,180,102",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "活动主页进入体力爬塔"
+  },
+  {
+    "itemName": "main_to_ap100",
+    "imageName": "as_main_to_ap100.png",
+    "roiFront": "375,451,169,70",
+    "roiBack": "352,431,215,110",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "活动主页进入ap100爬塔"
+  },
+  {
+    "itemName": "main_to_map",
+    "imageName": "as_main_to_map.png",
+    "roiFront": "792,451,153,78",
+    "roiBack": "770,431,198,120",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "活动主页进入战场地图"
+  },
+  {
+    "itemName": "map_to_ap",
+    "imageName": "as_map_to_ap.png",
+    "roiFront": "249,151,34,28",
+    "roiBack": "241,143,50,44",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "战场地图进入体力爬塔"
+  },
+  {
+    "itemName": "map_to_ap100",
+    "imageName": "as_map_to_ap100.png",
+    "roiFront": "249,245,34,28",
+    "roiBack": "241,237,50,44",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": "战场地图进入ap100爬塔"
   }
 ]

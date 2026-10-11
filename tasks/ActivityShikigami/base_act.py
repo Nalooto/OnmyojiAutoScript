@@ -275,16 +275,25 @@ class BaseAct(StateMachine, GameUi, GeneralBattle, SwitchSoul, ActivityShikigami
             logger.info(f"Lock {self.climb_type} team")
             match self.climb_type:
                 case "ap" | "boss":
-                    self.ui_click(self.I_AP_UNLOCK, stop=self.I_AP_LOCK, interval=1.5)
+                    self._set_team_lock_state(self.I_AP_UNLOCK, self.I_AP_LOCK, "lock")
                 case _:
-                    self.ui_click(self.I_UNLOCK, stop=self.I_LOCK, interval=1.5)
+                    self._set_team_lock_state(self.I_UNLOCK, self.I_LOCK, "lock")
             return
         logger.info(f"Unlock {self.climb_type} team")
         match self.climb_type:
             case "ap" | "boss":
-                self.ui_click(self.I_AP_LOCK, stop=self.I_AP_UNLOCK, interval=1.5)
+                self._set_team_lock_state(self.I_AP_LOCK, self.I_AP_UNLOCK, "unlock")
             case _:
-                self.ui_click(self.I_LOCK, stop=self.I_UNLOCK, interval=1.5)
+                self._set_team_lock_state(self.I_LOCK, self.I_UNLOCK, "unlock")
+
+    def _set_team_lock_state(self, click, stop, state: str) -> None:
+        if not self.ui_click_until_appear_or_timeout(
+            click, stop=stop, interval=1.5, timeout=5
+        ):
+            logger.warning(
+                f"Could not confirm {state} state for {self.climb_type} team; "
+                "continue without changing the lock state"
+            )
 
     def check_tickets_enough(self) -> bool:
         """

@@ -2,7 +2,7 @@
   {
     "itemName": "lock",
     "imageName": "as_lock.png",
-    "roiFront": "897,646,23,24",
+    "roiFront": "898,651,23,24",
     "roiBack": "685,612,330,86",
     "method": "Template matching",
     "threshold": 0.7,
@@ -11,7 +11,7 @@
   {
     "itemName": "unlock",
     "imageName": "as_unlock.png",
-    "roiFront": "897,646,28,25",
+    "roiFront": "898,654,24,25",
     "roiBack": "686,610,313,92",
     "method": "Template matching",
     "threshold": 0.7,
@@ -20,8 +20,8 @@
   {
     "itemName": "climb_mode_pass",
     "imageName": "as_climb_mode_pass.png",
-    "roiFront": "1141,544,21,21",
-    "roiBack": "1118,510,49,105",
+    "roiFront": "1147,636,24,30",
+    "roiBack": "1134,581,49,105",
     "method": "Template matching",
     "threshold": 0.8,
     "description": "活动爬塔标志"
@@ -29,7 +29,7 @@
   {
     "itemName": "climb_mode_ap",
     "imageName": "as_climb_mode_ap.png",
-    "roiFront": "1091,543,24,25",
+    "roiFront": "1088,662,24,25",
     "roiBack": "1055,495,202,219",
     "method": "Template matching",
     "threshold": 0.8,
@@ -47,7 +47,7 @@
   {
     "itemName": "climb_mode_ap100",
     "imageName": "as_climb_mode_ap100.png",
-    "roiFront": "1186,665,22,25",
+    "roiFront": "1203,668,22,25",
     "roiBack": "1055,495,202,219",
     "method": "Template matching",
     "threshold": 0.8,
@@ -56,7 +56,7 @@
   {
     "itemName": "ap_unlock",
     "imageName": "as_ap_unlock.png",
-    "roiFront": "799,653,22,25",
+    "roiFront": "803,653,22,25",
     "roiBack": "686,610,313,92",
     "method": "Template matching",
     "threshold": 0.8,
@@ -65,7 +65,7 @@
   {
     "itemName": "ap_lock",
     "imageName": "as_ap_lock.png",
-    "roiFront": "798,656,27,26",
+    "roiFront": "803,653,27,26",
     "roiBack": "686,610,313,92",
     "method": "Template matching",
     "threshold": 0.8,
@@ -74,7 +74,7 @@
   {
     "itemName": "act_fire",
     "imageName": "as_act_fire.png",
-    "roiFront": "1132,602,84,45",
+    "roiFront": "1137,594,84,45",
     "roiBack": "1080,530,192,190",
     "method": "Template matching",
     "threshold": 0.8,
@@ -88,5 +88,32 @@
     "method": "Template matching",
     "threshold": 0.8,
     "description": "boss挑战标志"
+  },
+  {
+    "itemName": "ap100_unlock",
+    "imageName": "as_ap100_unlock.png",
+    "roiFront": "749,651,25,21",
+    "roiBack": "686,610,313,92",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": ""
+  },
+  {
+    "itemName": "ap100_lock",
+    "imageName": "as_ap100_lock.png",
+    "roiFront": "749,651,25,21",
+    "roiBack": "686,610,313,92",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": ""
+  },
+  {
+    "itemName": "map_popup_close",
+    "imageName": "as_map_popup_close.png",
+    "roiFront": "1138,101,70,56",
+    "roiBack": "1118,84,110,91",
+    "method": "Template matching",
+    "threshold": 0.75,
+    "description": "中转战场弹窗关闭按钮"
   }
 ]
