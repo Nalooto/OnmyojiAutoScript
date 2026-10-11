@@ -317,7 +317,7 @@
   {
     "itemName": "i_default",
     "imageName": "gi_i_default.png",
-    "roiFront": "541,342,41,39",
+    "roiFront": "542,343,37,35",
     "roiBack": "541,342,41,39",
     "method": "Template matching",
     "threshold": 0.8,
