@@ -21,8 +21,6 @@ class ActivityShikigamiAssets:
 	C_RANDOM_BOTTOM = RuleClick(roi_front=(196,598,581,78), roi_back=(194,597,583,81), name="random_bottom")
 	# description 
 	C_RANDOM_ALL = RuleClick(roi_front=(42,94,1207,543), roi_back=(42,94,1207,543), name="random_all")
-	# 战场地图门票爬塔头像固定点击区域 
-	C_MAP_TO_PASS = RuleClick(roi_front=(681,321,27,34), roi_back=(674,313,41,48), name="map_to_pass")
 
 
 	# Image Rule Assets
@@ -151,8 +149,10 @@ class ActivityShikigamiAssets:
 	# 活动主页进入战场地图 
 	I_MAIN_TO_MAP = RuleImage(roi_front=(792,451,153,78), roi_back=(770,431,198,120), threshold=0.8, method="Template matching", file="./tasks/ActivityShikigami/as/as_main_to_map.png")
 	# 战场地图进入体力爬塔 
-	I_MAP_TO_AP = RuleImage(roi_front=(249,151,34,28), roi_back=(241,143,50,44), threshold=0.8, method="Template matching", file="./tasks/ActivityShikigami/as/as_map_to_ap.png")
+	I_MAP_TO_AP = RuleImage(roi_front=(73,245,94,26), roi_back=(73,245,94,26), threshold=0.8, method="Template matching", file="./tasks/ActivityShikigami/as/as_map_to_ap.png")
 	# 战场地图进入ap100爬塔 
-	I_MAP_TO_AP100 = RuleImage(roi_front=(249,245,34,28), roi_back=(241,237,50,44), threshold=0.8, method="Template matching", file="./tasks/ActivityShikigami/as/as_map_to_ap100.png")
+	I_MAP_TO_AP100 = RuleImage(roi_front=(74,336,93,27), roi_back=(74,336,93,28), threshold=0.8, method="Template matching", file="./tasks/ActivityShikigami/as/as_map_to_ap100.png")
+	#  
+	I_MAP_TO_PASS = RuleImage(roi_front=(74,152,93,27), roi_back=(74,152,93,28), threshold=0.8, method="Template matching", file="./tasks/ActivityShikigami/as/as_map_to_pass.png")
 
 

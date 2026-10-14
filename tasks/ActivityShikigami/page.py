@@ -59,7 +59,7 @@ page_act_ap.connect(
 page_act_pass = Page(ActivityShikigamiAssets.I_CLIMB_MODE_PASS)
 page_act_map.connect(
     page_act_pass,
-    ActivityShikigamiAssets.C_MAP_TO_PASS,
+    ActivityShikigamiAssets.I_MAP_TO_PASS,
     key="page_act_map->page_act_pass",
 )
 page_act_pass.connect(

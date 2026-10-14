@@ -182,8 +182,8 @@
   {
     "itemName": "map_to_ap",
     "imageName": "as_map_to_ap.png",
-    "roiFront": "249,151,34,28",
-    "roiBack": "241,143,50,44",
+    "roiFront": "73,245,94,26",
+    "roiBack": "73,245,94,26",
     "method": "Template matching",
     "threshold": 0.8,
     "description": "战场地图进入体力爬塔"
@@ -191,10 +191,19 @@
   {
     "itemName": "map_to_ap100",
     "imageName": "as_map_to_ap100.png",
-    "roiFront": "249,245,34,28",
-    "roiBack": "241,237,50,44",
+    "roiFront": "74,336,93,27",
+    "roiBack": "74,336,93,28",
     "method": "Template matching",
     "threshold": 0.8,
     "description": "战场地图进入ap100爬塔"
+  },
+  {
+    "itemName": "map_to_pass",
+    "imageName": "as_map_to_pass.png",
+    "roiFront": "74,152,93,27",
+    "roiBack": "74,152,93,28",
+    "method": "Template matching",
+    "threshold": 0.8,
+    "description": ""
   }
 ]
