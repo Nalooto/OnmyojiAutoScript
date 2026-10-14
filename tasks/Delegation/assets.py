@@ -51,6 +51,11 @@ class DelegationAssets:
 	O_D_NAME = RuleOcr(roi=(766,127,509,529), area=(766,127,509,529), mode="Full", method="Default", keyword="弥助的画", name="d_name")
 
 
+	# Click Rule Assets
+	# 点击已完成委派任务卡片（避开完成标签） 
+	C_D_DONE_CLICK = RuleClick(roi_front=(1140,257,105,43), roi_back=(1140,257,105,43), name="d_done_click")
+
+
 	# Image Rule Assets
 	# description 
 	I_REWARDS_DONE = RuleImage(roi_front=(982,303,149,60), roi_back=(982,303,149,60), threshold=0.8, method="Template matching", file="./tasks/Delegation/rewards/rewards_rewards_done.png")

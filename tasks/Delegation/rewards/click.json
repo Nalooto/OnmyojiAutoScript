@@ -1,0 +1,8 @@
+[
+  {
+    "itemName": "d_done_click",
+    "roiFront": "1140,257,105,43",
+    "roiBack": "1140,257,105,43",
+    "description": "点击已完成委派任务卡片（避开完成标签）"
+  }
+]

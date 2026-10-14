@@ -121,9 +121,12 @@ class ScriptTask(GameUi, DelegationAssets):
                 continue
             if check_timer.reached():
                 break
-            if self.ocr_appear_click(self.O_D_DONE, interval=1):
-                check_timer.reset()
-                continue
+            if self.ocr_appear(self.O_D_DONE, interval=1):
+                x, y, _, _ = self.O_D_DONE.area
+                self.C_D_DONE_CLICK.roi_front = (x + 145, y - 5, 105, 43)
+                if self.click(self.C_D_DONE_CLICK, interval=1):
+                    check_timer.reset()
+                    continue
 
 
 if __name__ == '__main__':
@@ -136,7 +139,4 @@ if __name__ == '__main__':
 
     # t.delegate_one('弥助的画')
     t.run()
-
-
-
 
