@@ -54,13 +54,10 @@ class BaseMoonSea(GeneralBattle, SixRealmsCommon):
         context.reward_no_battle_ts = None
         if self.appear(self.I_BOSS_SHUTU):  # 极表示boss战赢了
             context.is_win = True
-        if context.is_win and self.appear_then_click(self.I_SR_DOUBLE_REWARD_USE, interval=1.5):
+        if self._handle_double_reward(context.is_win):
             return BattleAction.CONTINUE
-        if not context.is_win and self.appear_then_click(self.I_SR_DOUBLE_REWARD_CANCEL, interval=1.5):
+        if self._handle_buy_box_prompt():
             return BattleAction.CONTINUE
-        if self.appear(self.I_SR_CHECK_BUY_BOX): # 是否前往购买万相赐福
-            if self.appear_then_click(self.I_SR_NOT_TIP, interval=1.5) and self.appear_then_click(self.I_UI_CANCEL):
-                return BattleAction.CONTINUE
         if self.appear(self.I_COIN, interval=2):
             self.coin_num += self.get_coin_num(self.I_COIN)
             logger.info(f'Current coin: {self.coin_num}')
@@ -68,3 +65,22 @@ class BaseMoonSea(GeneralBattle, SixRealmsCommon):
         if context.last_page != pages.page_reward:
             self.device.click_record_clear()
         return BattleAction.CONTINUE
+
+    def _handle_double_reward(self, is_win: bool) -> bool:
+        if is_win:
+            return self.appear_then_click(self.I_SR_DOUBLE_REWARD_USE, interval=1.5)
+        return self.appear_then_click(self.I_SR_DOUBLE_REWARD_CANCEL, interval=1.5)
+
+    def _handle_buy_box_prompt(self) -> bool:
+        if self.appear(self.I_SR_CHECK_BUY_BOX):
+            return self.appear_then_click(self.I_SR_NOT_TIP, interval=1.5) and \
+                self.appear_then_click(self.I_UI_CANCEL)
+        return False
+
+    def handle_reward_page(self):
+        is_win = self.appear(self.I_BOSS_SHUTU)
+        if self._handle_double_reward(is_win):
+            return
+        if self._handle_buy_box_prompt():
+            return
+        self.click(pages.random_click(), interval=1.2)
