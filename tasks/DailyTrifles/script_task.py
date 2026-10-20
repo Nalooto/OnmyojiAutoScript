@@ -238,9 +238,13 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets):
             self.appear_then_click(self.I_DT_GW_CLEAR_SEARCH)  # 清除搜索框内容
             self.ui_click(self.C_DT_GW_INPUT_SEARCH, self.I_DT_GW_CONFIRM, interval=1.5)  # 点击搜索框
             self.click(self.C_DT_GW_CLICK_INPUT)  # 点击名称输入框
-            # uiautomator2 通过 FastInputIME 传输 UTF-8 文本，并在必要时回退到 set_text
-            logger.info(f'Inputting name using uiautomator2: {name}, waiting start and send')
-            self.device.u2.send_keys(name, clear=True)
+            text_field = self.device.u2(focused=True)
+            if text_field.wait(timeout=1):
+                logger.info(f'Inputting name into focused field using uiautomator2: {name}')
+                text_field.set_text(name)
+            else:
+                logger.warning('Focused text field is unavailable, falling back to FastInputIME')
+                self.device.u2.send_keys(name, clear=True)
             self.ui_click_until_disappear(self.I_DT_GW_CONFIRM, interval=1.5)  # 点击确定
             donate_btn = self.I_DT_GW_DONATE
             if name_check:  # 若有多个相同前缀名称, 则需要取出一样的或最相近的名称
@@ -384,7 +388,12 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets):
                 logger.warning('There is no any luck msg')
                 break
 
-        self.goto_page(page_main)
+        enter_exploration = self.I_MAIN_GOTO_EXPLORATION
+        self.navigator.add_unknown_closer(enter_exploration)
+        try:
+            self.goto_page(page_main)
+        finally:
+            self.navigator.local_unknown_closers.remove(enter_exploration)
         self.config.daily_trifles.done_record.luck_msg_dt = datetime.now()
 
     def run_store(self):
