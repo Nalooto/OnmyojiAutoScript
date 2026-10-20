@@ -25,7 +25,7 @@ class ActivityShikigamiAssets:
 
 	# Image Rule Assets
 	# 上锁图标 
-	I_LOCK = RuleImage(roi_front=(898,651,23,24), roi_back=(685,612,330,86), threshold=0.7, method="Template matching", file="./tasks/ActivityShikigami/as/as_lock.png")
+	I_LOCK = RuleImage(roi_front=(905,651,23,24), roi_back=(685,612,330,86), threshold=0.7, method="Template matching", file="./tasks/ActivityShikigami/as/as_lock.png")
 	# 还未上锁图片 
 	I_UNLOCK = RuleImage(roi_front=(898,654,24,25), roi_back=(686,610,313,92), threshold=0.7, method="Template matching", file="./tasks/ActivityShikigami/as/as_unlock.png")
 	# 活动爬塔标志 
@@ -50,6 +50,10 @@ class ActivityShikigamiAssets:
 	I_AP100_LOCK = RuleImage(roi_front=(749,651,25,21), roi_back=(686,610,313,92), threshold=0.8, method="Template matching", file="./tasks/ActivityShikigami/as/as_ap100_lock.png")
 	# 中转战场弹窗关闭按钮 
 	I_MAP_POPUP_CLOSE = RuleImage(roi_front=(1138,101,70,56), roi_back=(1118,84,110,91), threshold=0.75, method="Template matching", file="./tasks/ActivityShikigami/as/as_map_popup_close.png")
+	#  
+	I_BOSS_UNLOCK = RuleImage(roi_front=(906,649,24,25), roi_back=(686,610,313,92), threshold=0.8, method="Template matching", file="./tasks/ActivityShikigami/as/as_boss_unlock.png")
+	#  
+	I_BOSS_LOCK = RuleImage(roi_front=(907,648,23,24), roi_back=(685,612,330,86), threshold=0.8, method="Template matching", file="./tasks/ActivityShikigami/as/as_boss_lock.png")
 
 
 	# Image Rule Assets
@@ -115,9 +119,9 @@ class ActivityShikigamiAssets:
 	# 进入主要的战斗界面 
 	I_TO_BATTLE_MAIN = RuleImage(roi_front=(320,176,87,105), roi_back=(282,76,155,370), threshold=0.8, method="Template matching", file="./tasks/ActivityShikigami/as/as_to_battle_main.png")
 	# 点击进入boss战斗页面 
-	I_TO_BATTLE_BOSS = RuleImage(roi_front=(126,421,79,87), roi_back=(42,353,234,327), threshold=0.8, method="Template matching", file="./tasks/ActivityShikigami/as/as_to_battle_boss.png")
+	I_TO_BATTLE_BOSS = RuleImage(roi_front=(1056,281,121,76), roi_back=(1001,240,248,173), threshold=0.8, method="Template matching", file="./tasks/ActivityShikigami/as/as_to_battle_boss.png")
 	# boss界面标志 
-	I_CHECK_BATTLE_BOSS = RuleImage(roi_front=(151,18,129,46), roi_back=(141,0,151,85), threshold=0.8, method="Template matching", file="./tasks/ActivityShikigami/as/as_check_battle_boss.png")
+	I_CHECK_BATTLE_BOSS = RuleImage(roi_front=(151,15,130,40), roi_back=(141,0,151,85), threshold=0.8, method="Template matching", file="./tasks/ActivityShikigami/as/as_check_battle_boss.png")
 	# 从main进入到式神录 
 	I_BATTLE_MAIN_TO_RECORDS = RuleImage(roi_front=(1015,560,39,42), roi_back=(674,539,439,157), threshold=0.8, method="Template matching", file="./tasks/ActivityShikigami/as/as_battle_main_to_records.png")
 	# 进入门票活动的按钮 
