@@ -56,6 +56,9 @@ class NormalClimbAct(BaseAct):
             case "ap100":
                 lock_rule = self.I_AP100_LOCK
                 unlock_rule = self.I_AP100_UNLOCK
+            case "boss":
+                lock_rule = self.I_BOSS_LOCK
+                unlock_rule = self.I_BOSS_UNLOCK
             case _:
                 lock_rule = self.I_LOCK
                 unlock_rule = self.I_UNLOCK
