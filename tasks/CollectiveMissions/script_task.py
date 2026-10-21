@@ -36,8 +36,15 @@ class ScriptTask(GameUi, CollectiveMissionsAssets):
             self.goto_page(page_main)
             self.set_next_run(task='CollectiveMissions', success=True)
             raise TaskEnd
-        self.select_and_update_cur_mission(self.config.collective_missions.missions_config.missions_select)
-        if self.current_mission is None:
+        mission = self.config.collective_missions.missions_config.missions_select
+        max_select_attempts = 2
+        for attempt in range(max_select_attempts):
+            if self.select_and_update_cur_mission(mission):
+                break
+            self.current_mission = None
+            if attempt + 1 < max_select_attempts:
+                logger.warning(f'Failed to select mission, retrying ({attempt + 1}/{max_select_attempts - 1})')
+        else:
             self.goto_page(page_main)
             self.set_next_run(task='CollectiveMissions', success=False)
             raise TaskEnd
@@ -61,7 +68,7 @@ class ScriptTask(GameUi, CollectiveMissionsAssets):
         switch_cnt, max_switch = 0, random.randint(12, 15)  # 尝试最多15次内能中奖找到对应任务
         while True:
             if switch_fail_cnt >= max_retry:
-                logger.warning(f'Cannot switch next mission, stop select and try run')
+                logger.warning('Cannot switch next mission, retry selection')
                 return False
             if switch_cnt >= max_switch:
                 logger.warning(f'Cannot find target mission: {mission.value}, exit')
@@ -230,4 +237,3 @@ if __name__ == '__main__':
     t.screenshot()
 
     t.run()
-
