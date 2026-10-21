@@ -22,6 +22,7 @@ from tasks.Chess.strategy.grigri import (
 )
 from tasks.Chess.strategy.shikigami_catalog import (
     SHIKIGAMI_BONDS_BY_ROMAJI,
+    resolve_shikigami,
 )
 
 
@@ -1148,6 +1149,7 @@ class ChessHandOperationsMixin:
         # soul 文件夹中的御魂卡。
         self.discover_souls_from_hand()
         verified_names = set(verified_names or set())
+        self.use_golden_copies_from_hand(verified_names)
         if not verified_names:
             logger.debug(
                 'Keep Chess souls in hand: no shikigami position was '
@@ -1273,6 +1275,85 @@ class ChessHandOperationsMixin:
 
         logger.debug(f'Chess soul equipment complete, equipped={equipped}')
         return equipped
+
+    def _golden_copy_targets(
+        self,
+        verified_names: set[str],
+    ) -> list[tuple[str, int]]:
+        """仅选择已确认在棋盘上的一费式神，并使用本局实际站位。"""
+        actual_positions = getattr(self, '_board_actual_positions', {})
+        targets = []
+        for name in verified_names:
+            entry = resolve_shikigami(name)
+            position = actual_positions.get(
+                name,
+                self.shikigami_deploy_positions.get(name),
+            )
+            if (
+                entry is not None
+                and entry.cost == 1
+                and position in SET_POSITIONS
+            ):
+                targets.append((name, int(position)))
+        return sorted(targets, key=lambda item: (item[1], item[0]))
+
+    def _golden_copy_hand_cards(self) -> list[dict]:
+        cards = []
+        for card in self._hand_card_detections():
+            identity = self.classify_hand_card(card['roi'])
+            if (
+                identity['type'] == 'duplicator'
+                and identity['name'] == 'golden_copy'
+            ):
+                cards.append(identity)
+        return cards
+
+    def use_golden_copies_from_hand(
+        self,
+        verified_names: set[str],
+    ) -> int:
+        """把黄金复制术拖到已确认上阵的一费式神；无法确认时保留。"""
+        used = 0
+        for _ in range(self.SOUL_EQUIP_SAFETY_LIMIT):
+            if not self._is_preparation_mode():
+                break
+            cards = self._golden_copy_hand_cards()
+            if not cards:
+                break
+            targets = self._golden_copy_targets(verified_names)
+            if not targets:
+                logger.info(
+                    'Keep 黄金复制术: no verified deployed one-cost shikigami'
+                )
+                break
+            if not self._ensure_shop_closed():
+                break
+
+            cards = self._golden_copy_hand_cards()
+            if not cards:
+                break
+            card = min(cards, key=lambda item: item['position'][0])
+            name, set_index = targets[0]
+            count_before = len(cards)
+            if not self._equip_soul_card(
+                card['position'],
+                set_index,
+                'GOLDEN_COPY',
+            ):
+                break
+            if not self._wait_chess_action_state(
+                lambda: len(self._golden_copy_hand_cards()) < count_before
+            ):
+                logger.warning(
+                    '黄金复制术 use not confirmed: '
+                    f'target={name}, set={set_index}'
+                )
+                break
+            used += 1
+            logger.info(
+                f'黄金复制术 used: target={name}, set={set_index}'
+            )
+        return used
 
     def deploy_shikigami_from_hand(self) -> list[str]:
         """关闭商店后上阵手牌式神，并以当前阶数限制场上人数。"""
@@ -1454,6 +1535,7 @@ class ChessHandOperationsMixin:
             )
         ]
         template_rules.append(self.hakuzosu_protect_rule)
+        template_rules.append(self.golden_copy_hand_rule)
         candidates = []
         for rule in template_rules:
             matches = rule.match_all_any(
@@ -1523,6 +1605,8 @@ class ChessHandOperationsMixin:
                 for rule_name, rule in self.soul_hand_rules
                 if rule_name == name
             ]
+        elif card_type == 'duplicator' and name == 'golden_copy':
+            rules = [self.golden_copy_hand_rule]
         else:
             return len(self._hand_card_detections())
 
@@ -1645,6 +1729,7 @@ class ChessHandOperationsMixin:
                 result = self.classify_hand_card(card_roi)
                 keep = (
                     result['type'] == 'soul'
+                    or result['type'] == 'duplicator'
                     or (
                         result['type'] == 'shikigami'
                         and result['name'] in self.shikigami_deploy_positions

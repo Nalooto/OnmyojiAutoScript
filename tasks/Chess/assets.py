@@ -39,6 +39,8 @@ class ChessAssets:
 	C_CLICK_CLOSE_SPECIFICS_AREA = RuleClick(roi_front=(193,95,91,430), roi_back=(193,95,91,430), name="click_close_specifics_area")
 	# 取消匹配等待
 	C_CANCEL_WAITING = RuleClick(roi_front=(584,597,111,45), roi_back=(579,592,121,55), name="cancel_waiting")
+	# 百鬼式神御魂选取框
+	C_HYAKKI_SOUL_SHIKI = RuleClick(roi_front=(117,138,901,460), roi_back=(117,138,901,460), name="hyakki_soul_shiki")
 
 
 	# Image Rule Assets
@@ -86,6 +88,8 @@ class ChessAssets:
 	I_CHECK_GOLDFISH = RuleImage(roi_front=(924,291,192,49), roi_back=(919,286,202,59), threshold=0.8, method="Template matching", file="./tasks/Chess/c/c_check_goldfish.png")
 	#
 	I_BACK_RED = RuleImage(roi_front=(977,67,41,46), roi_back=(972,62,51,56), threshold=0.8, method="Template matching", file="./tasks/Chess/c/c_back_red.png")
+	# 百鬼等待锁图标
+	I_HYAKKI_WAIT = RuleImage(roi_front=(1162,78,21,21), roi_back=(1136,39,80,665), threshold=0.8, method="Template matching", file="./tasks/Chess/c/c_hyakki_wait.png")
 	#
 	I_QUESTION_CHECK = RuleImage(roi_front=(209,16,33,34), roi_back=(199,5,57,53), threshold=0.8, method="Template matching", file="./tasks/Chess/c/c_question_check.png")
 
@@ -116,7 +120,9 @@ class ChessAssets:
 	#
 	O_BADGE_AREA = RuleOcr(roi=(181,650,945,46), area=(181,650,945,46), mode="Single", method="Default", keyword="", name="badge_area")
 	#
-	O_COIN = RuleOcr(roi=(141,659,87,25), area=(141,659,87,25), mode="DigitCounter", method="Default", keyword="", name="coin")
+	O_COIN = RuleOcr(roi=(406,660,87,25), area=(406,660,87,25), mode="DigitCounter", method="Default", keyword="", name="coin")
+	# 玩家昵称区域
+	O_NAME_RANGE = RuleOcr(roi=(1060,41,166,623), area=(1060,41,166,623), mode="Full", method="Default", keyword="", name="name_range")
 	#
 	O_NOW_TIME = RuleOcr(roi=(768,0,32,28), area=(768,0,32,28), mode="Single", method="Default", keyword="", name="now_time")
 	#

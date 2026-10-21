@@ -279,12 +279,23 @@ class ChessRecognitionMixin:
             normalized.append((entry.romaji, rule))
         return normalized
 
+    @cached_property
+    def golden_copy_hand_rule(self) -> RuleImage:
+        return RuleImage(
+            roi_front=(0, 0, 1, 1),
+            roi_back=self.HAND_AREA,
+            threshold=0.8,
+            method=RuleImage.METHOD_TEMPLATE_MATCH,
+            file=(CHESS_TASK_DIR / 'c' / 'c_golden_copy.png').as_posix(),
+        )
+
     def classify_hand_card(self, card_roi: tuple[int, int, int, int]) -> dict:
         """识别一个已定位的手牌框，未收录时返回 `unknown`。"""
         best = None
         categories = (
             ('shikigami', self.shikigami_hand_rules),
             ('soul', self.soul_hand_rules),
+            ('duplicator', [('golden_copy', self.golden_copy_hand_rule)]),
         )
         for category, rules in categories:
             for name, rule in rules:

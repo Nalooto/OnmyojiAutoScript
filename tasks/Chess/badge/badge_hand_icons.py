@@ -197,6 +197,15 @@ BADGE_NAME_MAP: dict[str, str] = {
     '黑夜山朱印': 'Heiyeshanzhuyin',
     '黑夜山朱印·贰': 'Heiyeshanzhuyin_er',
     '齐心协力': 'Qixinxieli',
+    '以伞为剑': 'Yisanweijian',
+    '六道朱印': 'Liudaozhuyin',
+    '回响纹章': 'Huixiangwenzhang',
+    '回响纹章·贰': 'Huixiangwenzhang_er',
+    '弹射炸弹': 'Tanshezhadan',
+    '怨恨连斩': 'Yuanhenlianzhan',
+    '浪涌扇舞': 'Langyongshanwu',
+    '终极吸取': 'Zhongjixiqu',
+    '螺螺螺锤': 'Luoluoluochui',
 }
 
 
@@ -392,6 +401,15 @@ BADGE_FILE_INDEX: dict[str, str] = {
     '黑夜山朱印': 'silver/badge_Heiyeshanzhuyin.png',
     '黑夜山朱印·贰': 'gold/badge_Heiyeshanzhuyin_er.png',
     '齐心协力': 'silver/badge_Qixinxieli.png',
+    '以伞为剑': 'silver/badge_Yisanweijian.png',
+    '六道朱印': 'silver/badge_Liudaozhuyin.png',
+    '回响纹章': 'silver/badge_Huixiangwenzhang.png',
+    '回响纹章·贰': 'gold/badge_Huixiangwenzhang_er.png',
+    '弹射炸弹': 'silver/badge_Tanshezhadan.png',
+    '怨恨连斩': 'silver/badge_Yuanhenlianzhan.png',
+    '浪涌扇舞': 'silver/badge_Langyongshanwu.png',
+    '终极吸取': 'silver/badge_Zhongjixiqu.png',
+    '螺螺螺锤': 'silver/badge_Luoluoluochui.png',
 }
 
 
@@ -587,6 +605,15 @@ BADGE_QUALITY_INDEX: dict[str, str] = {
     '黑夜山朱印': 'silver',
     '黑夜山朱印·贰': 'gold',
     '齐心协力': 'silver',
+    '以伞为剑': 'silver',
+    '六道朱印': 'silver',
+    '回响纹章': 'silver',
+    '回响纹章·贰': 'gold',
+    '弹射炸弹': 'silver',
+    '怨恨连斩': 'silver',
+    '浪涌扇舞': 'silver',
+    '终极吸取': 'silver',
+    '螺螺螺锤': 'silver',
 }
 
 

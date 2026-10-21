@@ -6,7 +6,6 @@ import time
 
 from module.exception import GameStuckError
 from module.logger import logger
-from tasks.Component.GeneralBattle.assets import GeneralBattleAssets
 
 
 class ChessBattleNavigationMixin:
@@ -114,7 +113,9 @@ class ChessBattleNavigationMixin:
                 return True
 
             safe_clicks += 1
-            self.click(GeneralBattleAssets.C_RANDOM_LEFT)
+            from tasks.GameUi.default_pages import random_click
+
+            self.click(random_click(), interval=1.5)
             time.sleep(self.CHESS_EXIT_SCREENSHOT_INTERVAL)
 
         raise GameStuckError('Global Chess: failed to return to lobby after result')

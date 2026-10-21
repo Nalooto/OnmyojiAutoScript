@@ -9,6 +9,7 @@ from tasks.Chess.assets import ChessAssets
 from tasks.Chess.config import Chess
 from tasks.Chess.runtime.economy import ChessEconomyMixin
 from tasks.Chess.runtime.hand_operations import ChessHandOperationsMixin
+from tasks.Chess.runtime.hyakki_draft import ChessHyakkiDraftMixin
 from tasks.Chess.runtime.recognition import ChessRecognitionMixin
 from tasks.Chess.runtime.round_state import ChessRoundStateMixin
 from tasks.Chess.runtime.settings import ChessRuntimeSettings
@@ -18,6 +19,7 @@ from tasks.GameUi.page import page_chess
 
 
 class ScriptTask(
+    ChessHyakkiDraftMixin,
     ChessRecognitionMixin,
     ChessHandOperationsMixin,
     ChessRoundStateMixin,
@@ -30,6 +32,14 @@ class ScriptTask(
     """百鬼棋局任务入口：仅负责任务、整局与回目编排。"""
 
     conf: Chess = None
+
+    def _burst(self) -> bool:
+        if super()._burst():
+            return True
+        if self.appear_then_click(self.I_CLOSE_RED, interval=0.8):
+            logger.info('Chess: close floating window with red cross')
+            return True
+        return False
 
     def _wait_chess_action_state(self, condition) -> bool:
         """在单次动作后限时轮询目标图标状态。"""
@@ -415,7 +425,9 @@ class ScriptTask(
         return self._read_chess_mode() == '战'
 
     def _handle_passive_stage(self, mode: str) -> bool:
-        """战、鬼、待阶段只等待，不主动改变商店状态。"""
+        """战、待阶段只等待；鬼阶段执行百鬼试行投掷。"""
+        if mode == '鬼':
+            self._handle_hyakki_draft()
         return mode in ('战', '鬼', '待')
 
     def _handle_battle_economy(self) -> str:
@@ -684,6 +696,7 @@ class ScriptTask(
         self._arakawa_goldfish_current_position = None
         self._board_special_units = {}
         self._last_game_rank = None
+        self._hyakki_turn = None
         self._reset_economy_state()
         strategy = self.get_lineup_strategy()
         logger.debug(
