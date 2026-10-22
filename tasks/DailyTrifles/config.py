@@ -66,10 +66,20 @@ class DailyTriflesConfig(BaseModel):
     hide_fields = dynamic_hide('draw_mystery_pattern')
 
 
+class AssetStatsConfig(ConfigBase):
+    # 每日琐事结束后读取一次角色资产（通过注入游戏进程读取，不使用 OCR）
+    enable: bool = Field(default=False, description='每日任务结束后读取角色资产，供 OASX 侧边栏展示')
+    # 自定义 frida-server 路径，留空则自动在 bin/ 与 AutoCheckinBigGod 任务目录中查找
+    frida_server_path: str = Field(default='', description='frida-server 路径，留空自动查找')
+    # 读取结束后是否保留 frida-server 进程（默认关闭以降低被检测概率）
+    keep_frida_running: bool = Field(default=False, description='读取后保留 frida-server 进程')
+
+
 class DailyTrifles(ConfigBase):
     scheduler: Scheduler = Field(default_factory=Scheduler)
     trifles_config: DailyTriflesConfig = Field(default_factory=DailyTriflesConfig)
     guild_donate: DailyGuildDonate = Field(default_factory=DailyGuildDonate)
+    asset_stats: AssetStatsConfig = Field(default_factory=AssetStatsConfig)
     done_record: DoneRecord = Field(default_factory=DoneRecord)
 
     hide_fields = dynamic_hide('done_record')

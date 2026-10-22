@@ -16,6 +16,7 @@ from tasks.GameUi.game_ui import GameUi
 from tasks.GameUi.page import page_main, page_summon, page_guild, page_mall, page_friends, page_courtyard_affairs
 from tasks.DailyTrifles.config import DailyTriflesConfig
 from tasks.DailyTrifles.assets import DailyTriflesAssets
+from tasks.DailyTrifles.asset_stats import AssetStats
 from tasks.Component.Summon.summon import Summon
 
 from module.logger import logger
@@ -26,7 +27,7 @@ import re
 from typing import Any, Optional, List, Callable
 
 
-class ScriptTask(GameUi, Summon, DailyTriflesAssets):
+class ScriptTask(GameUi, Summon, DailyTriflesAssets, AssetStats):
 
     def run(self):
         con = self.config.daily_trifles.trifles_config
@@ -45,6 +46,9 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets):
         # 商店签到 or 购买寿司
         if con.store_sign or con.buy_sushi_count > 0:
             self.run_store()
+        # 角色资产统计（注入游戏进程读取）
+        if self.config.daily_trifles.asset_stats.enable:
+            self.run_asset_stats()
         self.config.save()
         self.plan_next_dt()
         raise TaskEnd('DailyTrifles')
