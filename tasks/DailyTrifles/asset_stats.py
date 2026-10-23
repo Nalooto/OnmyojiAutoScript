@@ -182,10 +182,12 @@ class AssetStats:
     def _asset_stats_root_shell(self, cmd: str, timeout=10) -> str:
         """以 root 执行命令；su 模式下不重启 adbd，不影响正在运行的任务。"""
         if self._asset_stats_root_mode == 'su':
-            # adb shell 会把多个参数按空格拼接，su -c 只会拿到第一个词，
-            # 含 ; & > 的组合命令必须整体转义后作为单个参数交给 su。
+            # 含 ; & > 的组合命令必须整体转义后交给 su 的 shell。
+            # 注意这里要传 str 而不是 list：adbutils 在 Windows 上会先用
+            # subprocess.list2cmdline 拼 list，单元素含空格时会被包成 "..."
+            # 原样送到设备，sh 会把整串当成一个文件名（inaccessible or not found）。
             quoted = "'" + cmd.replace("'", "'\\''") + "'"
-            return self.device.adb_shell([f'su -c {quoted}'], timeout=timeout)
+            return self.device.adb_shell(f'su -c {quoted}', timeout=timeout)
         return self.device.adb_shell(cmd, timeout=timeout)
 
     def _asset_stats_ensure_frida_server(self):
@@ -200,7 +202,7 @@ class AssetStats:
             dev.adb_push(str(binary), REMOTE_FRIDA)
             dev.adb_shell(['chmod', '755', REMOTE_FRIDA], timeout=10)
         if not self._asset_stats_server_running():
-            self._asset_stats_root_shell(
+            start_out = self._asset_stats_root_shell(
                 f'nohup {REMOTE_FRIDA} -l 0.0.0.0:{FRIDA_PORT} > {REMOTE_LOG} 2>&1 &',
                 timeout=10,
             )
@@ -210,8 +212,9 @@ class AssetStats:
                 if self._asset_stats_server_running():
                     time.sleep(1)
                     return
-            log = dev.adb_shell(f'cat {REMOTE_LOG}', timeout=5)
-            raise RuntimeError(f'frida-server 启动失败: {log[-400:]}')
+            log = dev.adb_shell(f'cat {REMOTE_LOG} 2>&1', timeout=5)
+            raise RuntimeError(
+                f'frida-server 启动失败: {(log or start_out or "无输出")[-400:]}')
 
     def _asset_stats_remote_server_ok(self, binary: Path) -> bool:
         size = self.device.adb_shell(f'ls -l {REMOTE_FRIDA}', timeout=5).strip()
@@ -334,10 +337,12 @@ class AssetStats:
             if getattr(self.config.daily_trifles.asset_stats, 'keep_frida_running', False):
                 return
             if self._asset_stats_started_frida:
-                try:
-                    self._asset_stats_root_shell('killall frida-server', timeout=5)
-                except Exception:
-                    pass
+                # frida 17 会额外拉起 re.frida.helper，一并清掉，避免残留 root 进程
+                for proc in ('frida-server', 're.frida.helper'):
+                    try:
+                        self._asset_stats_root_shell(f'killall {proc}', timeout=5)
+                    except Exception:
+                        pass
                 # 不把 frida-server 留在设备上，降低被检测/残留的概率
                 self._asset_stats_root_shell(f'rm -f {REMOTE_FRIDA} {REMOTE_LOG}', timeout=10)
             self._asset_stats_started_frida = False

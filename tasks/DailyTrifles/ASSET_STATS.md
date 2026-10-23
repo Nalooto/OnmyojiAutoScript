@@ -118,6 +118,10 @@ toolkit\python.exe -m tasks.DailyTrifles.asset_cli oas1
 ## 注意
 
 - 需要 root 权限：adbd 已 root 或设备带 `su`（MuMu 12 两者都有）；
+- `su -c` 的组合命令（带 `>` `&` 的启动/清理/拷贝）必须以 **str** 形式交给
+  `adb_shell`；传 list 时 adbutils 会走 `subprocess.list2cmdline`，单元素含空格会被
+  包成 `"..."` 原样送到设备，sh 会把整串当成一个文件名而报
+  `inaccessible or not found`，日志里表现为「`cat: ...frida-server.log: No such file`」；
 - 游戏需已登录并进入庭院，否则会返回「游戏 Python 尚未初始化」；
 - 注入期间游戏可能短暂卡顿；
 - 该方案违反游戏用户协议，存在封号风险，默认关闭，请自行评估。
