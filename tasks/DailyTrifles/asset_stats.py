@@ -182,7 +182,10 @@ class AssetStats:
     def _asset_stats_root_shell(self, cmd: str, timeout=10) -> str:
         """以 root 执行命令；su 模式下不重启 adbd，不影响正在运行的任务。"""
         if self._asset_stats_root_mode == 'su':
-            return self.device.adb_shell(['su', '-c', cmd], timeout=timeout)
+            # adb shell 会把多个参数按空格拼接，su -c 只会拿到第一个词，
+            # 含 ; & > 的组合命令必须整体转义后作为单个参数交给 su。
+            quoted = "'" + cmd.replace("'", "'\\''") + "'"
+            return self.device.adb_shell([f'su -c {quoted}'], timeout=timeout)
         return self.device.adb_shell(cmd, timeout=timeout)
 
     def _asset_stats_ensure_frida_server(self):

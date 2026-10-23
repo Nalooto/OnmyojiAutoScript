@@ -180,10 +180,7 @@ class ScriptTask(ManualClaimMixin):
             self._adb_shell(['am', 'force-stop', GL_PACKAGE])
         except Exception:
             pass
-        try:
-            self._adb_root_shell('killall frida-server')
-        except Exception:
-            pass
+        self._kill_frida_server()
 
     # ======================== ADB 操作 ========================
 
@@ -243,12 +240,24 @@ class ScriptTask(ManualClaimMixin):
         logger.error(f'无法获取Root权限: {detail}')
         return None
 
+    @staticmethod
+    def _quote_shell_command(command):
+        """按 POSIX sh 规则转义整条命令。
+
+        adb shell 会把收到的多个参数用空格直接拼接后再交给设备端 shell，
+        拆分传参时 su -c 只能拿到第一个词，导致
+        `rm -f log; nohup frida-server >log 2>&1 &` 这类组合命令被拆散执行，
+        frida-server 最终以 shell 身份（非 root）启动。
+        因此这里必须把整条命令转义成一个参数再交给 su -c。
+        """
+        return "'" + command.replace("'", "'\\''") + "'"
+
     def _adb_root_shell(self, command, timeout=15):
         root_mode = self._ensure_root_access()
         if root_mode == 'adb':
             return self._adb_shell([command], timeout=timeout)
         if root_mode == 'su':
-            return self._adb_shell(['su', '-c', command], timeout=timeout)
+            return self._adb_shell([f'su -c {self._quote_shell_command(command)}'], timeout=timeout)
         raise RuntimeError('模拟器未提供Root权限')
 
     def _get_app_pid(self):
@@ -356,30 +365,52 @@ class ScriptTask(ManualClaimMixin):
             logger.warning(f'ADB连接检查失败: {e}')
             return False
 
-    def _is_frida_server_running(self):
+    def _get_frida_server_uid(self):
+        """返回正在运行的 frida-server 的实际 uid（取自 /proc/<pid>/status），未运行时返回 None。"""
         try:
-            output = self._adb_shell(['pidof', 'frida-server'])
-            pids = [value for value in output.split() if value.isdigit()]
-            if not pids:
-                return False
-
-            # /proc 的实际 UID 不受各 Android 版本 ps 输出格式差异影响。
-            for pid in pids:
-                status = self._adb_shell([f'cat /proc/{pid}/status'])
-                for line in status.splitlines():
-                    fields = line.split()
-                    if len(fields) > 1 and fields[0] == 'Uid:' and fields[1] == '0':
-                        return True
-
-            # frida-server 存在但不是 root 运行，杀掉重启
-            logger.warning('Frida Server未以root运行，正在重启...')
+            pids = [p for p in self._adb_shell(['pidof', 'frida-server']).split() if p.isdigit()]
+        except Exception:
+            return None
+        for pid in pids:
             try:
-                self._adb_root_shell('killall frida-server')
+                status = self._adb_shell([f'cat /proc/{pid}/status'])
+            except Exception:
+                continue
+            for line in status.splitlines():
+                fields = line.split()
+                if len(fields) > 1 and fields[0] == 'Uid:':
+                    return fields[1]
+        return None
+
+    def _kill_frida_server(self):
+        """尽力结束已存在的 frida-server，避免旧进程占用 27042 端口。"""
+        try:
+            self._adb_root_shell('killall frida-server')
+        except Exception:
+            pass
+        try:
+            pids = [p for p in self._adb_shell(['pidof', 'frida-server']).split() if p.isdigit()]
+        except Exception:
+            pids = []
+        for pid in pids:
+            try:
+                self._adb_root_shell(f'kill -9 {pid}')
             except Exception:
                 pass
+        if pids:
+            time.sleep(1)
+
+    def _is_frida_server_running(self):
+        uid = self._get_frida_server_uid()
+        if uid is None:
             return False
-        except Exception:
-            return False
+        if uid == '0':
+            return True
+
+        # frida-server 存在但不是 root 运行（常见于 su 命令被拆散执行），杀掉重启
+        logger.warning(f'Frida Server未以root运行 (uid={uid})，正在重启...')
+        self._kill_frida_server()
+        return False
 
     def _is_frida_server_installed(self):
         try:
@@ -448,12 +479,32 @@ class ScriptTask(ManualClaimMixin):
             logger.error(f'推送失败: {e}')
             return False
 
-    def _start_frida_server(self):
+    def _start_frida_server(self, use_adb_root=False):
         logger.info('启动Frida Server...')
+        if use_adb_root:
+            # su 通道启动失败时，尝试让 adbd 直接以 root 运行（部分模拟器的 su 是受限 shim）
+            logger.info('改用 adb root 重新获取Root权限...')
+            self._frida_root_mode = None
+            try:
+                self._adb_cmd_result(['root'], timeout=10)
+            except Exception as e:
+                logger.warning(f'adb root执行失败: {e}')
+            for _ in range(10):
+                time.sleep(0.5)
+                try:
+                    if 'uid=0(' in self._adb_shell(['id'], timeout=3):
+                        self._frida_root_mode = 'adb'
+                        break
+                except (subprocess.TimeoutExpired, OSError):
+                    continue
+
         root_mode = self._ensure_root_access()
         if not root_mode:
             logger.error('Frida Server需要Root权限，但su和adb root均不可用')
             return False
+
+        # 清掉可能残留的非root实例，避免端口占用导致新实例启动失败
+        self._kill_frida_server()
 
         # 保留启动日志，失败时可区分架构不匹配、权限或端口占用。
         start_cmd = (
@@ -478,6 +529,14 @@ class ScriptTask(ManualClaimMixin):
         start_log = self._adb_shell(['cat', FRIDA_SERVER_LOG])
         if start_log:
             logger.error(f'Frida Server启动输出: {start_log[:500]}')
+        uid = self._get_frida_server_uid()
+        if uid is not None:
+            logger.error(f'Frida Server进程存在但未以root运行 (uid={uid})，Root通道为: {root_mode}')
+
+        if root_mode == 'su' and not use_adb_root:
+            logger.warning('su通道启动失败，尝试 adb root 方式重试...')
+            return self._start_frida_server(use_adb_root=True)
+
         logger.error('Frida Server启动失败，请检查上述Root或启动输出')
         return False
 
