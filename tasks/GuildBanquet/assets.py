@@ -23,6 +23,8 @@ class GuildBanquetAssets:
 	I_BANQUET_ALL_PUT = RuleImage(roi_front=(718,412,90,31), roi_back=(653,377,233,105), threshold=0.8, method="Template matching", file="./tasks/GuildBanquet/res/res_banquet_all_put.png")
 	# 一键清空 
 	I_BANQUET_CLEAR_ALL = RuleImage(roi_front=(480,413,90,31), roi_back=(416,377,233,105), threshold=0.8, method="Template matching", file="./tasks/GuildBanquet/res/res_banquet_clear_all.png")
+	# 宴会标志2 
+	I_BANQUET_FLAG_2 = RuleImage(roi_front=(972,12,33,60), roi_back=(967,7,43,70), threshold=0.8, method="Template matching", file="./tasks/GuildBanquet/res/res_banquet_flag_2.png")
 
 
 	# Ocr Rule Assets

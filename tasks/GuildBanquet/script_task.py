@@ -16,6 +16,10 @@ import tasks.GuildBanquet.page as pages
 
 class ScriptTask(GameUi, GuildBanquetAssets):
 
+    def _banquet_flag_visible(self):
+        """寮宴会集结标志, 兼容两种旗帜样式"""
+        return self.appear(self.I_BANQUET_FLAG) or self.appear(self.I_BANQUET_FLAG_2)
+
     def run(self):
         if not self.check_date(datetime.now()):
             logger.warning("GuildBanquet is not available now")
@@ -23,7 +27,7 @@ class ScriptTask(GameUi, GuildBanquetAssets):
             raise TaskEnd
         self.goto_page(pages.page_guild)
         self.screenshot()
-        if not self.appear(self.I_BANQUET_FLAG):
+        if not self._banquet_flag_visible():
             self.set_next_run(task='GuildBanquet', server=False, target=self.get_next_dt(datetime.now()))
             self.goto_page(pages.page_main)
             raise TaskEnd
@@ -38,7 +42,7 @@ class ScriptTask(GameUi, GuildBanquetAssets):
             if datetime.now() - start_banquet_time > timedelta(seconds=max_wait_seconds):
                 logger.info('Guild banquet timeout, exit')
                 break
-            if not self.appear(self.I_BANQUET_FLAG):
+            if not self._banquet_flag_visible():
                 logger.info("Guild banquet finished, exit")
                 break
             logger.attr(f'{(datetime.now()-start_banquet_time).seconds}s',"Banquet ongoing, waiting...")
