@@ -84,7 +84,7 @@
     "itemName": "sa_login_form_apple",
     "imageName": "res_sa_login_form_apple.png",
     "roiFront": "508,354,100,100",
-    "roiBack": "508,355,100,100",
+    "roiBack": "508,354,100,101",
     "method": "Template matching",
     "threshold": 0.8,
     "description": "登录界面-选择手机类型为苹果."
@@ -93,7 +93,7 @@
     "itemName": "sa_login_form_android",
     "imageName": "res_sa_login_form_android.png",
     "roiFront": "671,353,100,100",
-    "roiBack": "670,352,100,100",
+    "roiBack": "670,352,101,101",
     "method": "Template matching",
     "threshold": 0.8,
     "description": "登录界面-选择手机类型为android"

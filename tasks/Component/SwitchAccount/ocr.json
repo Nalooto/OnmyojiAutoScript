@@ -20,7 +20,7 @@
   {
     "itemName": "sa_select_svr_character_list",
     "roiFront": "418,131,641,481",
-    "roiBack": "417,135,647,482",
+    "roiBack": "417,131,647,486",
     "mode": "Full",
     "method": "Default",
     "keyword": "",

@@ -117,15 +117,6 @@
     "description": "前往"
   },
   {
-    "itemName": "change_area",
-    "imageName": "res_change_area.png",
-    "roiFront": "993,610,63,61",
-    "roiBack": "993,610,63,61",
-    "method": "Template matching",
-    "threshold": 0.8,
-    "description": "description"
-  },
-  {
     "itemName": "ensure_button",
     "imageName": "res_ensure_button.png",
     "roiFront": "672,405,169,55",
