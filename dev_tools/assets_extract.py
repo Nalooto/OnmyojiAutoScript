@@ -75,6 +75,51 @@ class ImageExtractor:
         return description + name
 
 
+class FrameExtractor(ImageExtractor):
+    """
+    Frame rule 提取。
+    输出 F_XXX = RuleFrame(...) 与 I_XXX = F_XXX 兼容行，
+    供 tasks/Chess/runtime/frame_cards.py 等按帧读取的流程使用。
+    """
+
+    def extract_item(self, item) -> str:
+        from module.atom.frame import normalize_operations
+
+        badges = item.get('badges') or [{'imageName': item['imageName'], 'roiBadge': item['roiBadge']}]
+        ranges = item['roiRange'] if isinstance(item['roiRange'], list) else [item['roiRange']]
+        operations = normalize_operations(item.get('rangeOperations'), len(ranges), allow_missing_image=True)
+
+        handlers = []
+        for spec in operations:
+            if spec['type'] == 'image':
+                # 模板由位置参数传入，裁剪样本仅用于预览
+                spec.pop('imageName', None)
+                spec.pop('file', None)
+            kind = spec.pop('type')
+            cls = {'image': 'Image', 'ocr': 'Ocr', 'click': 'Click'}[kind]
+            handlers.append(cls + '(' + ', '.join(f'{k}={v!r}' for k, v in spec.items()) + ')')
+
+        def parse(text):
+            return tuple(float(v) if '.' in v else int(v) for v in text.split(','))
+
+        arguments = dict(
+            name=item['itemName'],
+            roi_badge=parse(item['roiBadge']),
+            roi_range=[parse(r) for r in ranges],
+            roi_back=parse(item['roiBack']),
+            threshold=item['threshold'],
+            method=item['method'],
+            profile=item.get('profile', 'High'),
+            badgefile=[f"./{self.image_path}/{b['imageName']}" for b in badges])
+        if item.get('badgeGrayscale', False):
+            arguments['badge_grayscale'] = True
+
+        name = name_transform(item['itemName'])
+        return f"\tF_{name} = RuleFrame(" + ', '.join(
+            f'{k}={v!r}' for k, v in arguments.items()) + ', range=[' + ', '.join(handlers) + '])\n' \
+            + f'\tI_{name} = F_{name}  # compatibility\n'
+
+
 class ClickExtractor:
 
     def __init__(self, file: str, data: list) -> None:
@@ -97,9 +142,13 @@ class ClickExtractor:
         :return:
         """
         description: str = f'\t# {item["description"]} \n'
+        # profile 为 RuleClick 的可选匹配档位；Default 是默认行为，无需显式写出
+        profile: str = str(item.get("profile", "Default"))
+        profile_arg: str = f'profile="{profile}", ' if profile in ("High", "More") else ''
         name: str = f'\tC_{name_transform(item["itemName"])} = RuleClick(' \
                     f'roi_front=({item["roiFront"]}), ' \
                     f'roi_back=({item["roiBack"]}), ' \
+                    f'{profile_arg}' \
                     f'name="{item["itemName"]}")\n'
         return description + name
 
@@ -273,7 +322,10 @@ class AssetsExtractor:
         获取所有json文件
         :return: json文件（带后缀）列表
         """
-        return [str(x) for x in self.task_path.rglob('*.json') if 'temp' not in str(x)]
+        return [str(x) for x in self.task_path.rglob('*.json')
+                if 'temp' not in str(x)
+                and 'test_fixtures' not in x.parts
+                and x.name not in ('page_asset_ownership.json', 'MINIMAL_RESOURCE_CLEANUP.json')]
 
     @classmethod
     def read_file(cls, file: str) -> list:
@@ -308,12 +360,18 @@ class AssetsExtractor:
     @classmethod
     def is_click_file(cls, data: list) -> bool:
         """
-        判断是不是clickrule 文件, 我这样的判断是有点不合规的
+        判断是不是clickrule 文件。
+        按必填字段判断而非字段总数，以兼容 profile 等扩展字段。
         :param data: 解析后的json数据，是list
         :return:
         """
         item = data[0]
-        return len(item) == 4
+        return (
+                all(key in item for key in ('itemName', 'roiFront', 'roiBack'))
+                and not any(key in item for key in (
+                    'imageName', 'polygon', 'duration', 'mode', 'keyword',
+                ))
+        )
 
     @classmethod
     def is_long_click_file(cls, data: list) -> bool:
@@ -362,11 +420,46 @@ class AssetsExtractor:
             return True
         return False
 
+    @classmethod
+    def asset_key(cls, item) -> str:
+        """
+        推导条目最终生成的常量名，用于检测同任务内的重名覆盖。
+        判定顺序必须与 extract() 的分派保持一致。
+        :param item: 单个素材条目
+        :return: 常量名，无法判定时返回 None
+        """
+        if not isinstance(item, dict) or 'itemName' not in item:
+            return None
+        name = name_transform(item['itemName'])
+        if 'roiBadge' in item and 'roiRange' in item:
+            return f'F_{name}'
+        if 'imageName' in item:
+            return f'I_{name}'
+        if 'keyword' in item:
+            return f'O_{name}'
+        if 'duration' in item:
+            return f'L_{name}'
+        if 'mode' in item and len(item) == 5:
+            return f'S_{name}'
+        if 'polygon' in item:
+            return f'C_{name}'
+        if all(key in item for key in ('roiFront', 'roiBack')) \
+                and not any(key in item for key in ('imageName', 'polygon', 'duration', 'mode', 'keyword')):
+            return f'C_{name}'
+        return None
+
     def write_file(self) -> None:
         """
         将自身的_resule写入文件
         :return:
         """
+        # Frame 素材（F_XXX）依赖 RuleFrame 及其内联操作类，仅在用到时补 import，
+        # 避免给所有任务的 assets.py 都加一行无用导入
+        frame_import = 'from module.atom.frame import RuleFrame, Image, Ocr, Click\n'
+        if '\tF_' in self._result and frame_import not in self._result:
+            self._result = self._result.replace(
+                'from module.atom.image import RuleImage\n',
+                'from module.atom.image import RuleImage\n' + frame_import, 1)
         with open(self.assets_file, 'w', encoding='utf-8', newline='\n') as f:
             f.write(self._result)
 
@@ -376,15 +469,33 @@ class AssetsExtractor:
         :return:
         """
         result = ''
+        seen = {}  # 常量名 -> (定义, 来源文件)，用于发现同任务内的静默覆盖
         for file in self.all_json_file():
             data = self.read_file(file)
             if not data:
                 continue
 
+            if isinstance(data, list):
+                for item in data:
+                    key = self.asset_key(item)
+                    if not key:
+                        continue
+                    if key in seen and seen[key][0] != item:
+                        logger.warning(f'素材重名 {key}: {file} 覆盖 {seen[key][1]}（两份定义不同）')
+                    seen[key] = (item, file)
+
             if self.is_list_file(data):
                 result += ListExtractor(file, data).result
                 continue
-            if self.is_image_file(data):
+
+            # 任务目录里还有索引/清单类 json（card_index.json、manifest.json 等），
+            # 它们不是素材定义，只有"元素为对象的数组"才继续往下分派
+            if not isinstance(data, list) or not isinstance(data[0], dict):
+                continue
+
+            if 'roiBadge' in data[0] and 'roiRange' in data[0]:
+                result += FrameExtractor(file, data).result
+            elif self.is_image_file(data):
                 result += ImageExtractor(file, data).result
             elif self.is_click_file(data):
                 result += ClickExtractor(file, data).result
@@ -396,6 +507,10 @@ class AssetsExtractor:
                 result += OcrExtractor(file, data).result
 
         if result == '':
+            if not self.assets_file.exists():
+                # 该目录本来就没有 assets.py，不必凭空造一个空类
+                logger.warning(f'No resource files under the {self.task_name} task, skip')
+                return
             logger.error(f'There are no resource files under the {self.task_name} task')
             self._result += '\tpass'
         else:
