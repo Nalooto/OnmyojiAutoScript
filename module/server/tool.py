@@ -912,6 +912,69 @@ class AnnotatorManager:
         return task_root, target_json
 
     @staticmethod
+    def _guard_annotator_target(target_json: Path) -> None:
+        """
+        拦截标注工具无法安全表达的文件，避免保存时静默损坏：
+        - Frame 素材（roiBadge + roiRange）：表单没有这些字段，保存会丢掉 badges/roiRange/rangeOperations
+        - 索引/清单类 json（dict 且无 name）：不是标注素材，保存会被写成空数组
+        """
+        if not target_json.exists():
+            return
+        try:
+            with open(target_json, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            return
+
+        if isinstance(data, list) and data and isinstance(data[0], dict) \
+                and "roiBadge" in data[0] and "roiRange" in data[0]:
+            raise AnnotatorError(
+                "frame_readonly",
+                f"{target_json.name} 是 Frame 素材（含 roiBadge/roiRange），标注工具不支持编辑，"
+                "请直接修改该 json；在此保存会丢失 badges/roiRange/rangeOperations 等字段",
+                400,
+            )
+
+        if isinstance(data, dict) and "name" not in data:
+            raise AnnotatorError(
+                "metadata_readonly",
+                f"{target_json.name} 是索引/清单类文件，不是标注素材，不能通过标注工具保存",
+                400,
+            )
+
+    @staticmethod
+    def _preserve_extra_fields(payload: list, target_json: Path) -> list:
+        """
+        按 itemName 把旧条目里标注工具不认识、但生成器/运行时会用到的字段（如 profile）合并回来，
+        避免在标注工具里改一条素材就把同文件的扩展字段全部抹掉。
+        """
+        if not isinstance(payload, list) or not target_json.exists():
+            return payload
+        try:
+            with open(target_json, "r", encoding="utf-8") as f:
+                old = json.load(f)
+        except (OSError, ValueError):
+            return payload
+        if not isinstance(old, list):
+            return payload
+
+        old_map = {}
+        for item in old:
+            if isinstance(item, dict) and item.get("itemName"):
+                old_map[str(item["itemName"])] = item
+
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+            prev = old_map.get(str(item.get("itemName", "")))
+            if not prev:
+                continue
+            for key, value in prev.items():
+                if key not in item and key != "itemName":
+                    item[key] = value
+        return payload
+
+    @staticmethod
     def _resolve_assets_extract_target(task_root: Path, target_json: Path) -> tuple[Path, Path]:
         task_root = task_root.resolve()
         target_json = target_json.resolve()
@@ -1365,6 +1428,9 @@ class AnnotatorManager:
 
         task_root, target_json = self._resolve_json_path(task_name, json_relpath)
 
+        # Frame 素材 / 索引文件用当前表单表达不了，保存会静默损坏，必须先拦住
+        self._guard_annotator_target(target_json)
+
         if rule_type == "image":
             payload = self._normalize_image_rules(rules) if rules else []
         elif rule_type == "ocr":
@@ -1379,6 +1445,9 @@ class AnnotatorManager:
             payload = self._normalize_list_rules(rules, list_meta)
         else:
             raise AnnotatorError("invalid_rule_type", f"不支持的 rule_type: {rule_type}", 400)
+
+        # 保留标注工具不认识的扩展字段（profile 等），避免改一条就抹掉整个文件
+        payload = self._preserve_extra_fields(payload, target_json)
 
         target_json.parent.mkdir(parents=True, exist_ok=True)
 
