@@ -3,7 +3,7 @@
 """百鬼棋局阵容羁绊注册表。
 
 新增体系时：
-1. 在 ``lineup_strategy.py`` 声明阵容配置并构建标准策略对象；
+1. 在 ``lineup_strategy.py`` 中统一维护阵容策略配置；
 2. 在 ``LINEUP_REGISTRY`` 注册拼音键、中文显示名和策略对象。
 
 OASX 下拉选项和主任务运行时选择均由本注册表生成。
@@ -14,8 +14,8 @@ from enum import Enum
 from tasks.Chess.strategy.lineup_strategy import (
     HAIGUO,
     MINGHUO,
-    QIJIAOSHAN,
     PINGANJING,
+    QIJIAOSHAN,
 )
 
 

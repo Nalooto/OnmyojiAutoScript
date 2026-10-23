@@ -2,7 +2,7 @@
 
 """百鬼棋局阵容策略共用的式神统一目录。
 
-数据来源于历史式神清单和式神商店卡面，每条记录含义为：
+数据来源于 历史式神清单和式神商店卡面，每条记录含义为：
 ``费用、当前费用下编号、罗马音、中文名、羁绊1、羁绊2、可选羁绊3``。
 
 对外提供三种等价索引：
@@ -35,12 +35,12 @@ class ShikigamiEntry:
     @property
     def hand_image(self) -> str:
         """手牌头像文件名。"""
-        return f'card/card_{self.romaji}.png'
+        return f'card/portraits/cost{self.cost}/card_{self.romaji}.png'
 
     @property
     def shop_image(self) -> str:
         """商店头像文件名。"""
-        return f'store/store_{self.romaji}.png'
+        return f'store/portraits/cost{self.cost}/store_{self.romaji}.png'
 
     @property
     def bonds(self) -> tuple[str, ...]:
@@ -110,6 +110,7 @@ SHIKIGAMI_ENTRIES = (
     ShikigamiEntry(5, 6, 'yuki_gozen', '雪御前', '寒霜', '锻刃', '雪巫女'),
     ShikigamiEntry(5, 7, 'kuzu_no_ha', '葛叶', '九尾妖狐', '狐妖', '嗜战'),
     ShikigamiEntry(5, 8, 'taira_no_masakado', '平将门', '流火', '常世', '狩日将军'),
+    # 新增式神；羁绊按当前版本登记。
     ShikigamiEntry(3, 17, 'odokuro', '荒骷髅', '常世', '冥府', '遗念'),
     ShikigamiEntry(3, 18, 'kujaku_myoo', '孔雀明王', '六道', '回响'),
     ShikigamiEntry(3, 19, 'shiki', '季', '六道', '分裂'),

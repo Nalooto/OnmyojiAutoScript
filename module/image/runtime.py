@@ -596,6 +596,7 @@ class ImageRuntime:
             "roi_back": roi_back,
             "scale_range": scale_range,
             "scale_step": float(rule_data.get("scale_step", 0.1)),
+            "grayscale": bool(rule_data.get("grayscale", False)),
         }
 
     def _match_rule_payload(
@@ -604,7 +605,21 @@ class ImageRuntime:
         rule_data: dict[str, Any],
         threshold: float | None = None,
     ) -> dict[str, Any]:
-        """执行单规则匹配并把结果转换为可直接返回给 RPC 层的字典。"""
+        """执行单规则匹配并把结果转换为可直接返回给 RPC 层的字典。
+
+        `badges` 表示同一规则挂在多个徽标模板上（如手牌/商店卡片的多档徽标）：
+        逐个匹配并返回首个命中的徽标下标，全部未命中时返回得分最高的那次比较。
+        """
+        badges = rule_data.get("badges")
+        if badges:
+            best = {"matched": False, "score": 0.0, "roi_front": None}
+            for index, badge in enumerate(badges):
+                result = self._match_rule_payload(image=image, rule_data=badge, threshold=threshold)
+                if result.get("matched"):
+                    return {**result, "badge_index": index}
+                if result.get("score", 0) > best.get("score", 0):
+                    best = result
+            return best
         rule = self._normalize_rule(rule_data=rule_data, threshold=threshold)
         matched, score, roi_front = self._match_rule(image=image, rule=rule)
         return {
@@ -628,7 +643,7 @@ class ImageRuntime:
     def _match_rule(self, image: np.ndarray, rule: dict[str, Any]) -> tuple[bool, float, list[int] | None]:
         """按规则声明的 method 分派到具体匹配实现。"""
         method = rule["method"]
-        if method == "Template matching":
+        if method in ("Template matching", "Masked template matching"):
             template = self._get_template_entry(rule["file"]).image_rgb
             return self._template_match_image(
                 image=image,
@@ -636,6 +651,7 @@ class ImageRuntime:
                 roi_back=rule["roi_back"],
                 threshold=rule["threshold"],
                 log_name=rule["name"],
+                grayscale=rule.get("grayscale", False),
             )
         if method == "Multi-scale template matching":
             template = self._get_template_entry(rule["file"]).image_rgb
@@ -685,13 +701,20 @@ class ImageRuntime:
         roi_back: list[int],
         threshold: float,
         log_name: str,
+        grayscale: bool = False,
     ) -> tuple[bool, float, list[int] | None]:
         """
         执行普通模板匹配，并在命中时回传前景 ROI。
 
         `roi_back` 表示在原图上的搜索区域，命中结果会被换算回原图坐标系。
+        `grayscale` 为真时先转灰度再比较，用于本身没有色彩区分度的徽标。
         """
         source = self._crop(image, roi_back)
+        if grayscale:
+            if source.ndim == 3:
+                source = cv2.cvtColor(source, cv2.COLOR_RGB2GRAY)
+            if template is not None and template.ndim == 3:
+                template = cv2.cvtColor(template, cv2.COLOR_RGB2GRAY)
         if self._template_image_invalid(template):
             logger.error(f"Template image is invalid: {None if template is None else template.shape}")
             return True, 1.0, [int(v) for v in roi_back]

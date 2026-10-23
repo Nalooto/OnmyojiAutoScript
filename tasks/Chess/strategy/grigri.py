@@ -5,7 +5,7 @@ import math
 import re
 from collections import Counter
 
-from tasks.Chess.badge.badge_hand_icons import (
+from tasks.Chess.resource.badge.badge_hand_icons import (
     BADGE_FILE_INDEX,
     BADGE_QUALITY_INDEX,
 )
@@ -54,6 +54,7 @@ DEFAULT_BENEFIT_BY_QUALITY = {
 }
 SILVER_SOUL_DEFAULT_BENEFIT = 3.0
 
+# 式神增强只对当前阵容配置中的对应式神计分。
 SHIKIGAMI_ENHANCEMENT_TARGETS = {
     '弹射炸弹': '觉',
     '怨恨连斩': '黑童子',
@@ -185,6 +186,8 @@ def lineup_bond_context(strategy: dict) -> dict:
     )
     primary = strategy.get('display_name', '')
     primary_count = counts.get(primary, 0)
+    # 次要羁绊只保留计数第二多的一项。Counter 保留阵容式神与羁绊的
+    # 首次出现顺序，因此并列时稳定选择阵容配置中先出现的羁绊。
     secondary_bond = strategy.get('secondary_bond') or max(
         (
             bond

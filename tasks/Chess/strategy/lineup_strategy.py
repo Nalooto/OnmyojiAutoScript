@@ -12,6 +12,7 @@
 - ``arakawa_goldfish_position``：荒川羁绊召唤金鱼后应移动到的位置。
   不使用荒川金鱼时为 ``None``；仅在下阵失败后打开失败位置详情，
   被动确认金鱼并移动到该位置；上阵确认失败后不尝试识别金鱼。
+- ``secondary_bond``：显式指定次要羁绊；未指定时按阵容羁绊计数选择。
 
 经济策略属于通用运营流程，写在主任务中，不放入阵容配置。
 """
@@ -65,7 +66,6 @@ QIJIAOSHAN_CONFIG = {
     },
 }
 
-
 QIJIAOSHAN = build_lineup_strategy(QIJIAOSHAN_CONFIG)
 
 
@@ -90,6 +90,27 @@ HAIGUO_CONFIG = {
 HAIGUO = build_lineup_strategy(HAIGUO_CONFIG)
 
 
+MINGHUO_CONFIG = {
+    'key': 'minghuo',
+    'display_name': '冥火',
+    'hakuzosu_protect_position': None,
+    'shikigami_positions': {
+        '思金神': (1, 1, ()),
+        '鬼使白': (1, 2, ()),
+        '寻香行': (2, 3, ()),
+        '判官': (1, 4, ()),
+        '荒骷髅': (1, 5, ()),
+        '鬼使黑': (2, 6, ()),
+        '黑童子': (1, 7, ()),
+        '平将门': (2, 8, ()),
+        '白童子': (1, 9, ()),
+    },
+}
+
+
+MINGHUO = build_lineup_strategy(MINGHUO_CONFIG)
+
+
 PINGANJING_CONFIG = {
     'key': 'pinganjing',
     'display_name': '平安京',
@@ -110,24 +131,3 @@ PINGANJING_CONFIG = {
 
 
 PINGANJING = build_lineup_strategy(PINGANJING_CONFIG)
-
-
-MINGHUO_CONFIG = {
-    'key': 'minghuo',
-    'display_name': '冥火',
-    'hakuzosu_protect_position': None,
-    'shikigami_positions': {
-        '思金神': (1, 1, ()),
-        '鬼使白': (1, 2, ()),
-        '寻香行': (2, 3, ()),
-        '判官': (1, 4, ()),
-        '荒骷髅': (1, 5, ()),
-        '鬼使黑': (2, 6, ()),
-        '黑童子': (1, 7, ()),
-        '平将门': (2, 8, ()),
-        '白童子': (1, 9, ()),
-    },
-}
-
-
-MINGHUO = build_lineup_strategy(MINGHUO_CONFIG)
