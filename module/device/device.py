@@ -26,6 +26,9 @@ from module.logger import logger
 
 class Device(Platform, Screenshot, Control, AppControl):
     _screen_size_checked = False
+    # 启动游戏后，画面三通道均值之和低于该值视为黑屏
+    # 实测：纯黑屏接近 0，游戏加载界面约 67，主界面 190+，取 20 有足够余量
+    APP_START_MIN_COLOR_SUM = 20.0
     detect_record = set()
     click_record = deque(maxlen=15)
     stuck_timer = Timer(60, count=60).start()
@@ -33,13 +36,16 @@ class Device(Platform, Screenshot, Control, AppControl):
     stuck_long_wait_list = ['BATTLE_STATUS_S', 'PAUSE', 'LOGIN_CHECK', 'PREPARE_BEFORE_BATTLE']
 
     def __init__(self, *args, **kwargs):
-        for trial in range(4):
+        # emulator_start() 内部已经带了“关机 + 强制结束进程 + 重启”的多轮重试，
+        # 外层只需要再兜一轮，否则启动失败时会连续重试非常久
+        max_trials = 2
+        for trial in range(max_trials):
             try:
                 super().__init__(*args, **kwargs)
                 break
             except EmulatorNotRunningError:
-                if trial >= 3:
-                    logger.critical('Failed to start emulator after 3 trial')
+                if trial >= max_trials - 1:
+                    logger.critical(f'Failed to start emulator after {max_trials} trial')
                     raise RequestHumanTakeover
                 # Try to start emulator
                 if self.emulator_instance is not None:
@@ -273,21 +279,27 @@ class Device(Platform, Screenshot, Control, AppControl):
         self.stuck_record_clear()
         self.click_record_clear()
 
-    def wait_app_start_ready(self, timeout: float = 15.0, interval: float = 0.5) -> None:
+    def wait_app_start_ready(self, timeout: float = 45.0, interval: float = 0.5) -> bool:
         """
         在启动app后，等待包名切换成功且画面脱离纯黑状态。
 
         这里直接调用底层截图方法做静默探测，避免app刚启动时首屏黑场造成成批告警。
+        正常画面（哪怕是加载界面）三通道均值之和通常在 60 以上，纯黑屏接近 0，
+        因此用 APP_START_MIN_COLOR_SUM 作为“黑屏”判据。
 
         Args:
             timeout: 最大等待秒数。
             interval: 每轮探测的间隔秒数。
+
+        Returns:
+            bool: True 表示画面已经有内容，False 表示超时仍然是黑屏。
         """
         deadline = time.time() + timeout
         screenshot_method = self.screenshot_methods.get(
             self.config.script.device.screenshot_method,
             self.screenshot_adb
         )
+        logged_black = False
 
         while time.time() < deadline:
             if not self.app_is_running():
@@ -302,13 +314,17 @@ class Device(Platform, Screenshot, Control, AppControl):
                 continue
 
             color = get_color(image, area=(0, 0, 1280, 720))
-            if sum(color) >= 1:
+            if sum(color) >= self.APP_START_MIN_COLOR_SUM:
                 logger.info(f'Game start ready, frame color: {color}')
-                return
+                return True
 
+            if not logged_black:
+                logger.info(f'Game screen is black, keep waiting: frame color: {color}')
+                logged_black = True
             time.sleep(interval)
 
-        logger.info('Wait game start ready timeout, continue with login flow')
+        logger.warning(f'Wait game start ready timeout after {timeout:.0f}s, screen is still black')
+        return False
 
 
 if __name__ == "__main__":

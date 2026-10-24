@@ -1,9 +1,14 @@
+import json
 import os
 import re
+import subprocess
 import typing as t
 
 from module.device.platform2.handlers.base import EmulatorHandler
 from module.logger import logger
+
+# MuMuManager 查询实例信息的超时时间（秒），查询只是本地 RPC，正常在 1s 内返回
+MUMU_INFO_TIMEOUT = 10
 
 
 class MuMu12Handler(EmulatorHandler):
@@ -50,16 +55,50 @@ class MuMu12Handler(EmulatorHandler):
                 return int(res.group(1))
         return None
 
-    def _resolve_console(self, instance) -> t.Optional[str]:
+    def _console_path(self, instance) -> t.Optional[str]:
+        """静默解析 MuMuManager.exe 路径，解析失败返回 None（不打印日志，供轮询调用）。"""
         exe = getattr(getattr(instance, 'emulator', None), 'path', '')
         console = self.single_to_console(exe) if isinstance(exe, str) else None
-        if not console:
-            logger.warning(f'Cannot resolve MuMu control executable from path {exe}')
-            return None
-        if not os.path.isfile(console):
-            logger.warning(f'MuMu control executable does not exist: {console}')
+        if not console or not os.path.isfile(console):
             return None
         return console
+
+    def _resolve_console(self, instance) -> t.Optional[str]:
+        console = self._console_path(instance)
+        if console is None:
+            exe = getattr(getattr(instance, 'emulator', None), 'path', '')
+            logger.warning(f'Cannot resolve MuMu control executable from path {exe}')
+        return console
+
+    @staticmethod
+    def run_console(console: str, args: list[str]) -> t.Optional[str]:
+        """
+        同步执行 MuMuManager 并返回标准输出（失败返回 None）。
+
+        Args:
+            console: MuMuManager.exe 路径。
+            args: 子命令参数。
+
+        Returns:
+            str: 标准输出；执行失败返回 None。
+        """
+        command = [console, *args]
+        try:
+            proc = subprocess.run(
+                command,
+                capture_output=True,
+                timeout=MUMU_INFO_TIMEOUT,
+                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+            )
+        except Exception as e:
+            logger.info(f'[mumu] run console command failed: {command}, error={e}')
+            return None
+
+        if proc.returncode != 0:
+            stderr = proc.stderr.decode('utf-8', errors='ignore').strip()
+            logger.info(f'[mumu] console command returned {proc.returncode}: {command}, stderr={stderr}')
+            return None
+        return proc.stdout.decode('utf-8', errors='ignore').strip()
 
     def iter_instances(self, emulator) -> t.Iterable:
         from module.device.platform2.emulator_windows import EmulatorInstance, Emulator
@@ -120,3 +159,82 @@ class MuMu12Handler(EmulatorHandler):
             return None
         # MuMuManager.exe control -v 1 shutdown
         return f'"{console}" control -v {mumu_id} shutdown'
+
+    def query_state(self, instance) -> t.Optional[dict]:
+        """
+        通过 `MuMuManager.exe info -v N` 获取实例的真实启动状态。
+
+        通过 is_process_started / is_android_started 可以区分三种典型情况：
+        - 未启动：两者都是 False
+        - 启动中或卡在启动动画（如 98%）：进程已起但安卓未起
+        - 启动完成：两者都是 True
+
+        Args:
+            instance: 模拟器实例。
+
+        Returns:
+            dict: 状态字典，查询失败返回 None。
+        """
+        mumu_id = self.get_instance_id(instance)
+        console = self._console_path(instance)
+        if mumu_id is None or console is None:
+            return None
+
+        output = self.run_console(console, ['info', '-v', str(mumu_id)])
+        if not output or not output.startswith('{'):
+            return None
+        try:
+            data = json.loads(output)
+        except json.JSONDecodeError as e:
+            logger.info(f'[mumu] decode instance info failed: {e}')
+            return None
+
+        launch_err_code = data.get('launch_err_code') or 0
+        launch_err_msg = str(data.get('launch_err_msg') or '')
+        if launch_err_msg:
+            error = launch_err_msg
+        elif launch_err_code:
+            error = f'launch_err_code={launch_err_code}'
+        else:
+            error = ''
+
+        return {
+            'process_started': bool(data.get('is_process_started')),
+            'android_started': bool(data.get('is_android_started')),
+            'phase': str(data.get('player_state') or ''),
+            'error': error,
+            'pid': data.get('pid'),
+            'vt_enabled': data.get('vt_enabled'),
+            'hyperv_enabled': data.get('hyperv_enabled'),
+        }
+
+    def force_kill_regex(self, instance) -> t.Optional[str]:
+        """
+        构造仅命中该实例的进程正则。
+
+        MuMu12(nx) 的进程结构：
+        - MuMuNxMain.exe：多开共用的主进程，绝对不能杀
+        - MuMuNxDevice.exe -v N --vm MuMuPlayer-12.0-N：每实例一个设备进程
+        - MuMuVMMHeadless.exe --comment MuMuPlayer-12.0-N：每实例一个虚拟机进程
+          注意它的父进程是共用的 MuMuVMMSVC.exe，所以不能用 /t 连带 kill
+
+        Args:
+            instance: 模拟器实例。
+
+        Returns:
+            str: cmdline 正则，无法构造时返回 None。
+        """
+        mumu_id = self.get_instance_id(instance)
+        name = getattr(instance, 'name', '')
+        patterns = []
+        if isinstance(name, str) and name:
+            # cmdline 里的反斜杠会被替换成 /，参数之间仍是空格
+            quoted = re.escape(name)
+            patterns.append(rf'--vm[\s/]+{quoted}\b')
+            patterns.append(rf'--comment[\s/]+{quoted}\b')
+        if mumu_id is not None:
+            patterns.append(rf'MuMuNxDevice\.exe[\s/]+-v[\s/]+{mumu_id}\b')
+            patterns.append(rf'MuMuHeadless\.exe[\s/]+-v[\s/]+{mumu_id}\b')
+        if not patterns:
+            return None
+        return '(' + '|'.join(patterns) + ')'

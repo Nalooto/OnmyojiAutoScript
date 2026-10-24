@@ -89,6 +89,36 @@ class EmulatorHandler(ABC):
         """返回需要 kill 的进程正则，返回 None 表示使用命令方式停止。"""
         return None
 
+    def force_kill_regex(self, instance) -> t.Optional[str]:
+        """
+        返回“仅针对该实例”的进程正则，用于正常关机失败后强杀卡死的实例。
+
+        注意：必须精确到单个实例，不能误杀同一模拟器下的其它多开实例，
+        也不要匹配多开管理器（如 MuMuNxMain.exe）这类共享进程。
+
+        Returns:
+            str: 匹配卡死实例进程的 cmdline 正则，None 表示不支持强杀。
+        """
+        return None
+
+    def query_state(self, instance) -> t.Optional[dict]:
+        """
+        查询实例自身的启动状态，用于提前发现“进程已起但安卓未起”的卡死。
+
+        建议返回的键（缺失即视为未知，调用方会退化成只依赖 adb 状态）：
+            process_started (bool): 实例进程是否已启动
+            android_started (bool): 安卓系统是否已启动完成
+            phase (str): 模拟器侧的状态字符串
+            error (str): 启动错误信息，空字符串表示无错误
+            pid (int): 实例进程 pid
+            vt_enabled (bool): 虚拟化是否可用
+            hyperv_enabled (bool): 是否与 Hyper-V 共存
+
+        Returns:
+            dict: 状态字典，None 表示不支持或查询失败。
+        """
+        return None
+
     def start_show_window(self) -> bool:
         """启动时命令本身是否默认需要窗口（如 MuMu12 通过 manager 启动，不需要窗口）。"""
         return True

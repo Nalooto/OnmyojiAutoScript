@@ -2,6 +2,7 @@ import ctypes
 import os
 import re
 import subprocess
+import time
 from dataclasses import dataclass, field
 
 import psutil
@@ -9,6 +10,7 @@ from adbutils import AdbDevice, AdbClient
 from filelock import FileLock
 
 from deploy.utils import DataProcessInfo
+from module.base.decorator import del_cached_property
 from module.base.timer import Timer
 from module.device.handle import Handle
 from module.device.platform2.platform_base import PlatformBase
@@ -16,6 +18,26 @@ from module.device.platform2.emulator_windows import EmulatorInstance, EmulatorM
 from module.logger import logger
 
 from ctypes import wintypes
+
+# ---------------------------------------------------------------------------
+# 模拟器启停相关的可调参数（单位：秒）
+# ---------------------------------------------------------------------------
+# 单次启动命令发出后，等待设备就绪的最长时间
+EMULATOR_START_TIMEOUT = 150
+# 轮询模拟器自身启动状态的间隔（每次查询都要启动 MuMuManager，不能太频繁）
+EMULATOR_STATE_POLL_INTERVAL = 5
+# 进程已起但安卓迟迟未起来（典型表现：卡在 98%）的判定时间
+EMULATOR_BOOT_STUCK_TIMEOUT = 75
+# 安卓已起来但 adb 迟迟连不上（端口冲突 / adb 服务异常）的判定时间
+EMULATOR_ADB_STUCK_TIMEOUT = 60
+# 正常关机（MuMuManager shutdown）的等待时间
+EMULATOR_STOP_TIMEOUT = 20
+# 强杀之后等待进程真正消失的时间
+EMULATOR_FORCE_KILL_TIMEOUT = 10
+# 多开时相邻两次启动的最小间隔，避免多个实例同时冷启动抢磁盘 IO
+EMULATOR_START_STAGGER = 8
+# 强杀后、重新启动前的静置时间，等虚拟机磁盘锁释放
+EMULATOR_RESTART_SETTLE_SECONDS = 5
 
 
 class EmulatorUnknown(Exception):
@@ -132,13 +154,23 @@ class EmulatorStartWatchState:
     interval: Timer
     timeout: Timer
     struct_window: Timer
+    # 从“进程已起”开始计时，用于识别卡在启动动画（98%）的实例
+    boot_stuck: Timer = field(default_factory=lambda: Timer(EMULATOR_BOOT_STUCK_TIMEOUT))
+    # 从“安卓已起但 adb 不可用”开始计时
+    adb_stuck: Timer = field(default_factory=lambda: Timer(EMULATOR_ADB_STUCK_TIMEOUT))
+    # 模拟器状态查询节流
+    state_poll: Timer = field(default_factory=lambda: Timer(EMULATOR_STATE_POLL_INTERVAL).start())
     window_hidden: bool = False
     new_window: int = 0
+    # 是否曾经观察到实例进程存在，用于区分“还没起”和“起来后又崩了”
+    process_seen: bool = False
     logged_events: set[str] = field(default_factory=set)
 
 
 class PlatformWindows(PlatformBase, EmulatorManager):
     LIFECYCLE_LOCK_FILE = os.path.abspath('./log/emulator_lifecycle.lock')
+    # 记录上一次发出启动命令的时间，供多开错峰启动使用
+    STAGGER_FILE = os.path.abspath('./log/emulator_start_stagger.txt')
 
     @classmethod
     def build_startupinfo(cls, show_window=True):
@@ -195,6 +227,31 @@ class PlatformWindows(PlatformBase, EmulatorManager):
                 count += 1
 
         return count
+
+    @classmethod
+    def kill_process_by_pid(cls, pid: int) -> int:
+        """
+        结束指定 pid 的进程。
+
+        Args:
+            pid: 进程号。
+
+        Returns:
+            int: 成功结束的进程数量。
+        """
+        if not pid:
+            return 0
+        try:
+            proc = psutil.Process(pid)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            return 0
+        try:
+            logger.info(f'Kill emulator process: {DataProcessInfo(proc=proc, pid=pid)}')
+            proc.kill()
+            return 1
+        except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
+            logger.info(f'Kill emulator process failed: pid={pid}, error={e}')
+            return 0
 
     @classmethod
     def emulator_lifecycle_lock(cls) -> FileLock:
@@ -290,6 +347,238 @@ class PlatformWindows(PlatformBase, EmulatorManager):
         from module.device.platform2.handlers import get_handler
         return get_handler(instance.type)
 
+    def _query_instance_state(self, instance: EmulatorInstance) -> dict | None:
+        """
+        查询模拟器实例自身的启动状态（由 Handler 实现，不支持时返回 None）。
+
+        Args:
+            instance: 目标实例。
+
+        Returns:
+            dict | None: 状态字典，None 表示无法查询。
+        """
+        handler = self._get_handler(instance)
+        if handler is None:
+            return None
+        query = getattr(handler, 'query_state', None)
+        if query is None:
+            return None
+        try:
+            return query(instance)
+        except Exception as e:
+            logger.info(f'[emu-state] query instance state failed: serial={instance.serial}, error={e}')
+            return None
+
+    def _instance_process_alive(self, instance: EmulatorInstance) -> bool | None:
+        """
+        判断实例进程是否还活着。
+
+        Returns:
+            bool | None: True/False 表示可以确定，None 表示无法查询。
+        """
+        state = self._query_instance_state(instance)
+        if state is None:
+            return None
+        return bool(state.get('process_started'))
+
+    def _wait_instance_stopped(self, instance: EmulatorInstance, timeout: float = EMULATOR_STOP_TIMEOUT) -> bool:
+        """
+        等待实例真正退出：adb 中不再处于 device 状态，且实例进程已经消失。
+
+        Args:
+            instance: 目标实例。
+            timeout: 最长等待秒数。
+
+        Returns:
+            bool: 已完全退出返回 True。
+        """
+        timer = Timer(timeout).start()
+        while True:
+            adb_offline = self.list_adb_device_status().get(instance.serial) != 'device'
+            process_alive = self._instance_process_alive(instance)
+            if adb_offline and process_alive is not True:
+                logger.info(
+                    f'[emu-stop] instance stopped: serial={instance.serial}, '
+                    f'process_alive={process_alive}'
+                )
+                return True
+            if timer.reached():
+                logger.warning(
+                    f'[emu-stop] wait instance stopped timeout: serial={instance.serial}, '
+                    f'timeout={timeout:.0f}s, process_alive={process_alive}'
+                )
+                return False
+            time.sleep(2)
+
+    def _force_kill_instance(self, instance: EmulatorInstance) -> int:
+        """
+        强杀卡死的实例进程。只杀当前实例，不影响同机其它多开实例。
+
+        Args:
+            instance: 目标实例。
+
+        Returns:
+            int: 成功结束的进程数量。
+        """
+        killed = 0
+        state = self._query_instance_state(instance)
+        pid = state.get('pid') if state else None
+        if pid:
+            killed += self.kill_process_by_pid(pid)
+
+        handler = self._get_handler(instance)
+        regex = None
+        if handler is not None:
+            builder = getattr(handler, 'force_kill_regex', None)
+            if builder is not None:
+                try:
+                    regex = builder(instance)
+                except Exception as e:
+                    logger.info(f'[emu-stop] build force kill regex failed: {e}')
+        if regex:
+            killed += self.kill_process_by_regex(regex)
+
+        logger.warning(
+            f'[emu-stop] force kill instance: serial={instance.serial}, pid={pid}, '
+            f'killed={killed}, regex={regex}'
+        )
+        return killed
+
+    def _force_kill_and_wait(self, instance: EmulatorInstance) -> bool:
+        """
+        强杀实例并等待其退出，用于启动超时 / 卡死的兜底处理。
+        """
+        logger.warning(f'[emu-start] force kill stuck instance: serial={instance.serial}')
+        self._force_kill_instance(instance)
+        stopped = self._wait_instance_stopped(instance, timeout=EMULATOR_FORCE_KILL_TIMEOUT)
+        if not stopped:
+            logger.warning(f'[emu-start] instance still alive after force kill: serial={instance.serial}')
+        return stopped
+
+    @staticmethod
+    def _settle_after_kill() -> None:
+        """强杀后静置一段时间，等模拟器释放虚拟机磁盘锁。"""
+        time.sleep(EMULATOR_RESTART_SETTLE_SECONDS)
+
+    def _respect_start_stagger(self, instance: EmulatorInstance) -> None:
+        """
+        多开错峰启动：保证相邻两次启动命令之间至少间隔 EMULATOR_START_STAGGER 秒。
+
+        调用方需持有模拟器生命周期锁，时间戳写在文件里，因此对多个脚本进程同样有效。
+        """
+        if EMULATOR_START_STAGGER <= 0:
+            return
+
+        last_start = 0.0
+        try:
+            with open(self.STAGGER_FILE, 'r', encoding='utf-8') as f:
+                last_start = float((f.read() or '0').strip() or 0)
+        except (OSError, ValueError):
+            last_start = 0.0
+
+        delay = last_start + EMULATOR_START_STAGGER - time.time()
+        if delay > 0:
+            delay = min(delay, float(EMULATOR_START_STAGGER))
+            logger.info(
+                f'[emu-start] stagger {delay:.1f}s before launch to avoid concurrent cold boot: '
+                f'serial={instance.serial}'
+            )
+            time.sleep(delay)
+
+        try:
+            os.makedirs(os.path.dirname(self.STAGGER_FILE), exist_ok=True)
+            with open(self.STAGGER_FILE, 'w', encoding='utf-8') as f:
+                f.write(f'{time.time():.3f}')
+        except OSError as e:
+            logger.info(f'[emu-start] write stagger file failed: {e}')
+
+    def _check_emulator_boot_state(
+        self,
+        state: EmulatorStartWatchState,
+        instance: EmulatorInstance,
+        device_ready: bool = False
+    ) -> bool:
+        """
+        周期查询模拟器自身状态，尽早识别卡在启动动画（如 98%）或启动失败的实例。
+
+        Args:
+            state: 启动监视状态。
+            instance: 目标实例。
+            device_ready: adb 中该实例是否已经可用。
+
+        Returns:
+            bool: True 表示继续等待，False 表示这次启动已确定失败，应立即放弃。
+        """
+        if not state.state_poll.reached():
+            return True
+        state.state_poll.reset()
+
+        info = self._query_instance_state(instance)
+        if info is None:
+            # 不支持查询状态的模拟器，退化成只依赖 adb 状态与总超时
+            return True
+
+        if info.get('vt_enabled') is False or info.get('hyperv_enabled'):
+            self._log_emulator_watch_once(
+                state,
+                'virtualization',
+                'warning',
+                f'[emu-start] virtualization state is not ideal for emulator boot: '
+                f"serial={state.serial}, vt_enabled={info.get('vt_enabled')}, "
+                f"hyperv_enabled={info.get('hyperv_enabled')}"
+            )
+
+        error = str(info.get('error') or '').strip()
+        if error:
+            logger.warning(f'[emu-start] emulator reported boot error: serial={state.serial}, error={error}')
+            return False
+
+        phase = str(info.get('phase') or '').lower()
+        if 'fail' in phase or 'error' in phase:
+            logger.warning(f'[emu-start] emulator boot phase failed: serial={state.serial}, phase={phase}')
+            return False
+
+        process_started = bool(info.get('process_started'))
+        android_started = bool(info.get('android_started'))
+
+        if process_started:
+            state.process_seen = True
+        elif state.process_seen:
+            logger.warning(f'[emu-start] emulator process exited during boot: serial={state.serial}')
+            return False
+
+        if process_started and not android_started:
+            if not state.boot_stuck.started():
+                state.boot_stuck.start()
+                logger.info(
+                    f'[emu-start] android booting: serial={state.serial}, '
+                    f"pid={info.get('pid')}, phase={phase or '<none>'}"
+                )
+            elif state.boot_stuck.reached():
+                logger.warning(
+                    f'[emu-start] emulator stuck at boot for {EMULATOR_BOOT_STUCK_TIMEOUT}s '
+                    f"(pid={info.get('pid')}, phase={phase or '<none>'}), give up this attempt"
+                )
+                return False
+        else:
+            state.boot_stuck.clear()
+
+        # 安卓已经起来但 adb 一直不可用，通常是端口占用或 adb 服务异常，等下去也不会好
+        if android_started and not device_ready:
+            if not state.adb_stuck.started():
+                state.adb_stuck.start()
+                logger.info(f'[emu-start] android started but adb not ready yet: serial={state.serial}')
+            elif state.adb_stuck.reached():
+                logger.warning(
+                    f'[emu-start] android started but adb unavailable for {EMULATOR_ADB_STUCK_TIMEOUT}s, '
+                    f'give up this attempt: serial={state.serial}'
+                )
+                return False
+        else:
+            state.adb_stuck.clear()
+
+        return True
+
     def _build_emulator_watch_state(self, instance: EmulatorInstance) -> EmulatorStartWatchState:
         """
         构建模拟器启动监视所需的运行状态。
@@ -298,7 +587,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
             serial=instance.serial,
             current_window=get_focused_window(),
             interval=Timer(1).start(),
-            timeout=Timer(120).start(),
+            timeout=Timer(EMULATOR_START_TIMEOUT).start(),
             struct_window=Timer(10),
         )
 
@@ -557,6 +846,9 @@ class PlatformWindows(PlatformBase, EmulatorManager):
     def _emulator_stop(self, instance: EmulatorInstance):
         """
         Stop a emulator without error handling (delegates to Handler)
+
+        关机命令只是“发出去了”，并不代表实例真的退出，
+        因此这里会校验实例是否退出，超时则强杀该实例进程。
         """
         handler = self._get_handler(instance)
         if handler is None:
@@ -565,13 +857,18 @@ class PlatformWindows(PlatformBase, EmulatorManager):
         kill_regex = handler.stop_by_kill(instance)
         if kill_regex:
             self.kill_process_by_regex(kill_regex)
+        else:
+            cmd = handler.build_stop_command(instance)
+            if cmd is None:
+                raise EmulatorUnknown(f'Handler returned no stop command for: {instance}')
+            self.execute(cmd)
+
+        if self._wait_instance_stopped(instance):
             return True
 
-        cmd = handler.build_stop_command(instance)
-        if cmd is None:
-            raise EmulatorUnknown(f'Handler returned no stop command for: {instance}')
-        self.execute(cmd)
-        return True
+        logger.warning(f'[emu-stop] graceful stop timed out, force kill: serial={instance.serial}')
+        self._force_kill_instance(instance)
+        return self._wait_instance_stopped(instance, timeout=EMULATOR_FORCE_KILL_TIMEOUT)
 
     def _emulator_function_wrapper(self, func: callable, instance: EmulatorInstance = None):
         """
@@ -622,7 +919,10 @@ class PlatformWindows(PlatformBase, EmulatorManager):
 
             self._hide_emulator_window_if_needed(state)
             self._track_emulator_focus_window(state)
-            if not self._ensure_emulator_device_ready(state):
+            device_ready = self._ensure_emulator_device_ready(state)
+            if not self._check_emulator_boot_state(state, instance, device_ready=device_ready):
+                return False
+            if not device_ready:
                 continue
             if not self._ensure_emulator_command_ready(state):
                 continue
@@ -659,13 +959,17 @@ class PlatformWindows(PlatformBase, EmulatorManager):
                         f'attempt={attempt}/{max_attempts}'
                     )
                     if not self._emulator_function_wrapper(self._emulator_stop, instance):
-                        logger.info('[emu-start] lock release: stop failed')
-                        return False
+                        # 关机/强杀都没能确认实例退出，仍然再试一次启动：
+                        # 直接放弃会让整轮重试提前结束，反而更容易导致脚本启动失败
+                        logger.warning('[emu-start] stop instance failed, launch anyway')
                     instance = self.refresh_target_instance(reason=f'post-stop refresh attempt={attempt}')
                     if instance is None:
                         logger.info('[emu-start] lock release: target missing after stop')
                         return False
+                    # 等虚拟机磁盘锁释放，避免新实例直接复用半死的旧实例
+                    self._settle_after_kill()
 
+                self._respect_start_stagger(instance)
                 logger.info(
                     f'[emu-start] start target: serial={instance.serial}, name={instance.name or "<default>"}, '
                     f'type={instance.type}, attempt={attempt}/{max_attempts}'
@@ -678,10 +982,13 @@ class PlatformWindows(PlatformBase, EmulatorManager):
                     logger.info('[emu-start] lock release: start failed')
                     if attempt >= max_attempts:
                         logger.warning(
-                            f'[emu-start] final attempt failed, skip recovery stop: serial={instance.serial}'
+                            f'[emu-start] final attempt failed, force kill to keep next run clean: '
+                            f'serial={instance.serial}'
                         )
+                        self._force_kill_and_wait(instance)
                         break
                     continue
+
                 logger.info(
                     f'[emu-start] start submitted: serial={instance.serial}, '
                     f'attempt={attempt}/{max_attempts}'
@@ -692,13 +999,78 @@ class PlatformWindows(PlatformBase, EmulatorManager):
                 return True
             if attempt >= max_attempts:
                 logger.warning(
-                    f'[emu-start] final attempt failed, skip recovery stop: serial={instance.serial}'
+                    f'[emu-start] final attempt failed, force kill to keep next run clean: '
+                    f'serial={instance.serial}'
                 )
+                self._force_kill_and_wait(instance)
                 break
             logger.attr(max_attempts - attempt, 'Failed to connect or start, try again')
 
         logger.error(f'Failed to start emulator after {max_attempts} attempts')
         return False
+
+    def emulator_stop(self):
+        logger.hr('Emulator stop', level=1)
+        logger.info('[emu-stop] lock wait')
+        with self.emulator_lifecycle_lock():
+            logger.info('[emu-stop] lock acquired')
+            instance = self.refresh_target_instance(reason='pre-stop refresh')
+            if instance is None:
+                logger.info('[emu-stop] lock release: target instance not found')
+                return False
+            if not self._emulator_function_wrapper(self._emulator_stop, instance):
+                logger.info('[emu-stop] lock release: stop failed')
+                return False
+
+            logger.info(f'[emu-stop] stop submitted: serial={instance.serial}')
+            logger.info('[emu-stop] lock release: stop submitted')
+            return True
+
+    def emulator_restart_stuck(self) -> bool:
+        """
+        强杀当前实例并重新启动，用于模拟器渲染异常（启动游戏后黑屏）等恢复场景。
+
+        与 emulator_start 的重试不同，这里不依赖模拟器自身的关机流程，直接强杀，
+        因此即使实例卡在启动动画、管理器无响应也能恢复。
+
+        Returns:
+            bool: 重启成功并重新连上 adb 返回 True。
+        """
+        logger.hr('Emulator restart (recovery)', level=1)
+        logger.info('[emu-restart] lock wait')
+        with self.emulator_lifecycle_lock():
+            logger.info('[emu-restart] lock acquired')
+            instance = self.refresh_target_instance(reason='pre-restart refresh')
+            if instance is None:
+                logger.warning('[emu-restart] target instance not found')
+                return False
+            self._force_kill_instance(instance)
+            if not self._wait_instance_stopped(instance, timeout=EMULATOR_FORCE_KILL_TIMEOUT):
+                logger.warning(f'[emu-restart] instance still alive: serial={instance.serial}')
+            self._settle_after_kill()
+            logger.info('[emu-restart] lock release: instance killed')
+
+        if not self.emulator_start():
+            logger.warning('[emu-restart] failed to start emulator again')
+            return False
+
+        serial = self.serial
+        try:
+            self.adb_disconnect(serial)
+        except Exception as e:
+            logger.info(f'[emu-restart] adb disconnect failed: {e}')
+        # 实例重启后旧会话（adb / u2）都已失效，清掉缓存让它重建
+        del_cached_property(self, 'adb')
+        del_cached_property(self, 'u2')
+        try:
+            self.adb_connect(serial)
+        except Exception as e:
+            logger.warning(f'[emu-restart] adb reconnect failed: {e}')
+            return False
+
+        logger.info('[emu-restart] emulator restarted')
+        return True
+
 
     def emulator_stop(self):
         logger.hr('Emulator stop', level=1)
