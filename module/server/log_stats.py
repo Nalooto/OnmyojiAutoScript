@@ -22,6 +22,8 @@ _EQ_LINE_RE = re.compile(r"^═{15,}\s*$")
 _EQ_TITLE_LINE_RE = re.compile(r"^═{10,}\s+(?P<title>.*?)\s+═{10,}\s*$")
 _TITLE_LINE_RE = re.compile(r"^─{10,}\s*(?P<title>.*?)\s*─{10,}\s*$")
 _TASK_ENDED_RE = re.compile(r"^(?P<title>.+?)\s+task ended\b", re.IGNORECASE)
+_SCHEDULER_START_RE = re.compile(r"Scheduler:\s*Start task\s+`(?P<name>[^`]+)`")
+_SCHEDULER_END_RE = re.compile(r"Scheduler:\s*End task\s+`(?P<name>[^`]+)`")
 _BATTLE_TITLE = "GENERAL BATTLE START"
 _START_TITLE = "START"
 _SIX_REALMS_TITLE = "SIXREALMS"
@@ -47,15 +49,6 @@ class TaskRunState:
 
 
 @dataclass
-class RuntimeState:
-    saw_start_boundary: bool = False
-    pre_start_first: datetime | None = None
-    region_last: datetime | None = None
-    session_start: datetime | None = None
-    total_duration: float = 0.0
-
-
-@dataclass
 class HistoricalStatsCacheEntry:
     expires_at: datetime
     payload: dict[str, Any]
@@ -64,11 +57,11 @@ class HistoricalStatsCacheEntry:
 class LogStatsParser:
     def __init__(self) -> None:
         self.summary: dict[str, dict[str, Any]] = {}
-        self.runtime = RuntimeState()
         self._pending_task_name: str | None = None
         self._pending_task_start_name: str | None = None
         self._pending_battle_start = False
         self._active_task: TaskRunState | None = None
+        self._active_task_from_scheduler = False
         self._active_battle: BattleState | None = None
         self._six_realms_active = False
         self._six_realms_start_time: datetime | None = None
@@ -185,20 +178,82 @@ class LogStatsParser:
         return stripped.title() if stripped.isupper() else stripped
 
     def _handle_task_boundary(self, title: str) -> None:
+        """处理一个任务分块标题。
+
+        任务分块标题只表示"日志内容属于哪个任务", 不代表调度器开始了新一轮任务。
+        调度器已经把任务真实起止写在 `Scheduler: Start/End task` 里, 因此:
+
+        - SIXREALMS 是六道的容器标题, 需要丢掉调度器建出的容器任务, 再按子任务统计;
+        - 与当前调度器任务同名的标题直接忽略, 让 `_active_task` 继续沿用调度器起始时间。
+        """
+        if self._is_six_realms_title(title):
+            self._handle_six_realms_boundary()
+            return
+        if self._is_active_scheduler_boundary(title):
+            return
         self._close_active_battle()
         self._close_active_task()
         self._reset_six_realms_state()
         if title.upper() == _START_TITLE:
-            self._handle_start_boundary()
-            self._pending_task_start_name = None
-            return
-        if self._is_six_realms_title(title):
-            self._six_realms_active = True
-            self._pending_task_name = None
             self._pending_task_start_name = None
             return
         self._pending_task_start_name = self._pending_task_name or title
         self._pending_task_name = None
+
+    def _handle_six_realms_boundary(self) -> None:
+        """开始六道容器, 丢弃调度器给出的容器任务。"""
+        self._close_active_battle()
+        if self._active_task_from_scheduler:
+            self._active_task = None
+        else:
+            self._close_active_task()
+        self._active_task_from_scheduler = False
+        self._pending_task_name = None
+        self._pending_task_start_name = None
+        self._reset_six_realms_state()
+        self._six_realms_active = True
+
+    def _is_active_scheduler_boundary(self, title: str) -> bool:
+        """判断分块标题是否就是当前调度器任务自己的标题。"""
+        if not self._active_task_from_scheduler or self._active_task is None:
+            return False
+        return self._normalize_title(title) == self._normalize_title(self._active_task.name)
+
+    def _handle_scheduler_line(self, line: str, ts: datetime) -> bool:
+        """处理调度器起止行, 返回该行是否已被消费。"""
+        start = _SCHEDULER_START_RE.search(line)
+        if start:
+            self._handle_scheduler_start(start.group("name").strip(), ts)
+            return True
+        end = _SCHEDULER_END_RE.search(line)
+        if end:
+            self._handle_scheduler_end(end.group("name").strip(), ts)
+            return True
+        return False
+
+    def _handle_scheduler_start(self, name: str, ts: datetime) -> None:
+        """按调度器的开始行建立任务, 起始时间取调度器时间戳。"""
+        self._close_active_battle()
+        self._close_active_task()
+        self._reset_six_realms_state()
+        self._active_task = TaskRunState(name=name, start_time=ts, last_time=ts)
+        self._active_task_from_scheduler = True
+        self._pending_task_name = None
+        self._pending_task_start_name = None
+
+    def _handle_scheduler_end(self, name: str, ts: datetime) -> None:
+        """按调度器的结束行收尾任务, 结束时间取调度器时间戳。"""
+        if self._six_realms_active:
+            self._close_active_battle()
+            self._close_active_task(end_time=ts)
+            self._reset_six_realms_state()
+            return
+        if self._active_task is None:
+            return
+        if self._normalize_title(self._active_task.name) != self._normalize_title(name):
+            return
+        self._close_active_battle()
+        self._close_active_task(end_time=ts)
 
     def _handle_equal_boundary(self, title: str) -> bool:
         if not self._six_realms_active:
@@ -229,24 +284,6 @@ class LogStatsParser:
         self._six_realms_start_time = None
         self._six_realms_last_time = None
 
-    def _handle_start_boundary(self) -> None:
-        runtime = self.runtime
-        if not runtime.saw_start_boundary:
-            runtime.saw_start_boundary = True
-            runtime.total_duration = self._append_duration(
-                runtime.total_duration,
-                runtime.pre_start_first,
-                runtime.region_last,
-            )
-        else:
-            runtime.total_duration = self._append_duration(
-                runtime.total_duration,
-                runtime.session_start,
-                runtime.region_last,
-            )
-        runtime.session_start = None
-        runtime.region_last = None
-
     def _handle_battle_boundary(self) -> None:
         self._close_active_battle()
         if self._active_task is not None:
@@ -261,8 +298,10 @@ class LogStatsParser:
         if ts is None:
             return
 
-        self._consume_runtime_timestamp(ts)
         self._consume_six_realms_timestamp(ts)
+
+        if self._handle_scheduler_line(line, ts):
+            return
 
         if self._pending_task_start_name:
             self._active_task = TaskRunState(name=self._pending_task_start_name, start_time=ts, last_time=ts)
@@ -281,16 +320,6 @@ class LogStatsParser:
         task_ended_title = self._extract_task_ended_title(line)
         if task_ended_title is not None:
             self._handle_task_ended(task_ended_title)
-
-    def _consume_runtime_timestamp(self, ts: datetime) -> None:
-        runtime = self.runtime
-        runtime.region_last = ts
-        if not runtime.saw_start_boundary:
-            if runtime.pre_start_first is None:
-                runtime.pre_start_first = ts
-            return
-        if runtime.session_start is None:
-            runtime.session_start = ts
 
     def _consume_six_realms_timestamp(self, ts: datetime) -> None:
         if not self._six_realms_active:
@@ -325,16 +354,23 @@ class LogStatsParser:
         self._active_battle = None
         self._pending_battle_start = False
 
-    def _close_active_task(self) -> None:
+    def _close_active_task(self, end_time: datetime | None = None) -> None:
+        """收尾当前任务。
+
+        Args:
+            end_time: 调度器给出的任务结束时间; 为空时回退到最后一条日志时间。
+        """
         if self._active_task is None:
             self._pending_task_start_name = None
+            self._active_task_from_scheduler = False
             return
 
         start_time = self._active_task.start_time
-        end_time = self._active_task.last_time
+        end_time = end_time or self._active_task.last_time
         if start_time is None or end_time is None or end_time < start_time:
             self._active_task = None
             self._pending_task_start_name = None
+            self._active_task_from_scheduler = False
             return
 
         duration = round((end_time - start_time).total_seconds(), 3)
@@ -369,6 +405,7 @@ class LogStatsParser:
 
         self._active_task = None
         self._pending_task_start_name = None
+        self._active_task_from_scheduler = False
 
     def _build_tasks_payload(self) -> dict[str, dict[str, Any]]:
         cleaned_tasks: dict[str, dict[str, Any]] = {}
@@ -385,11 +422,16 @@ class LogStatsParser:
         return cleaned_tasks
 
     def _current_total_runtime(self) -> float:
-        runtime = self.runtime
-        if runtime.saw_start_boundary:
-            total_duration = self._append_duration(runtime.total_duration, runtime.session_start, runtime.region_last)
-        else:
-            total_duration = self._append_duration(0.0, runtime.pre_start_first, runtime.region_last)
+        """统计当天任务的实际耗时合计。
+
+        旧实现按"脚本会话墙钟"累加, 会把任务之间的空闲等待(关闭模拟器、等待下一次调度)
+        也算成运行时间, 一天能虚增到 20 小时以上。这里改为各任务实际耗时之和,
+        与页面上每个任务的明细保持一致。
+        """
+        total_duration = sum(
+            float(task_data.get("total_duration_seconds", 0.0))
+            for task_data in self.summary.values()
+        )
         return round(total_duration, 3)
 
     @staticmethod
@@ -400,12 +442,6 @@ class LogStatsParser:
             "count": int(count),
             "avg_duration_seconds": round(total_duration_seconds / count, 3),
         }
-
-    @staticmethod
-    def _append_duration(total_duration: float, start_time: datetime | None, end_time: datetime | None) -> float:
-        if start_time is None or end_time is None or end_time < start_time:
-            return total_duration
-        return round(total_duration + (end_time - start_time).total_seconds(), 3)
 
 
 @dataclass
