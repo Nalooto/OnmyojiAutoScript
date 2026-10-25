@@ -169,11 +169,16 @@ class Screenshot(Adb, DroidCast, Scrcpy, Window, NemuIpc):
         """
         if interval is None:
             origin = self.config.script.optimization.screenshot_interval
-            interval = limit_in(origin, 0.1, 0.3)
+            # 四开场景下允许把截图间隔放宽到 0.5s：
+            # 帧率对图像服务与截图链路的 CPU 是线性影响，放宽间隔是最直接的降耗手段。
+            interval = limit_in(origin, 0.1, 0.5)
             if interval != origin:
                 logger.warning(f'Optimization.ScreenshotInterval {origin} is revised to {interval}')
                 self.config.script.optimization.screenshot_interval = interval
             # Allow nemu_ipc to have a lower default
+            # 注意：Config 上并不存在 Emulator_ScreenshotMethod（__getattr__ 兜底返回 None），
+            # 该分支实际从不生效。不要"修正"成 device.screenshot_method，
+            # 否则 nemu_ipc 下间隔会被压回 0.2s，与上面的放宽策略冲突。
             if self.config.Emulator_ScreenshotMethod == 'nemu_ipc':
                 interval = limit_in(origin, 0.1, 0.2)
         elif interval == 'combat':
