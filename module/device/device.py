@@ -29,6 +29,16 @@ class Device(Platform, Screenshot, Control, AppControl):
     # 启动游戏后，画面三通道均值之和低于该值视为黑屏
     # 实测：纯黑屏接近 0，游戏加载界面约 67，主界面 190+，取 20 有足够余量
     APP_START_MIN_COLOR_SUM = 20.0
+    # 等待游戏首帧的总时长上限。四开冷启动时单次截图/adb 调用会卡住数秒，
+    # 45s 在满载机器上会被一两轮探测直接吃光，放宽到 90s。
+    APP_START_TIMEOUT = 90.0
+    # 连续多少次「截图通道异常」判定为通道故障，需要重建截图连接。
+    # 探针异常只说明“看不到”，不是黑屏证据，不能计入黑屏超时。
+    APP_START_PROBE_FAIL_LIMIT = 3
+    # 单轮探测耗时超过该值时打印告警，便于定位是卡在截图还是卡在 adb
+    APP_START_SLOW_ITERATION = 10.0
+    # 上一次 wait_app_start_ready() 的失败原因：'black' / 'probe' / 'app_not_running'
+    app_start_failure_reason = None
     detect_record = set()
     click_record = deque(maxlen=15)
     stuck_timer = Timer(60, count=60).start()
@@ -279,7 +289,31 @@ class Device(Platform, Screenshot, Control, AppControl):
         self.stuck_record_clear()
         self.click_record_clear()
 
-    def wait_app_start_ready(self, timeout: float = 45.0, interval: float = 0.5) -> bool:
+    def rebuild_screenshot_channel(self):
+        """
+        重建 nemu_ipc 截图通道。
+
+        模拟器实例被重启后，旧的 rpc 连接失效，而 nemu_ipc 的 retry 里
+        ``except Exception`` 分支不会重连，导致后续截图永久失败，只能重启脚本进程恢复。
+        这里主动释放并重新建立连接。
+        """
+        if self.config.script.device.screenshot_method != 'nemu_ipc':
+            return
+        if not hasattr(self, 'nemu_ipc_release'):
+            return
+
+        logger.warning('[app-start] rebuilding nemu_ipc screenshot channel')
+        try:
+            self.nemu_ipc_release()
+        except Exception as e:
+            logger.warning(f'[app-start] release nemu_ipc failed: {e}')
+        try:
+            _ = self.nemu_ipc
+            logger.info('[app-start] nemu_ipc reconnected')
+        except Exception as e:
+            logger.warning(f'[app-start] reconnect nemu_ipc failed: {e}')
+
+    def wait_app_start_ready(self, timeout: float = None, interval: float = 0.5) -> bool:
         """
         在启动app后，等待包名切换成功且画面脱离纯黑状态。
 
@@ -287,43 +321,95 @@ class Device(Platform, Screenshot, Control, AppControl):
         正常画面（哪怕是加载界面）三通道均值之和通常在 60 以上，纯黑屏接近 0，
         因此用 APP_START_MIN_COLOR_SUM 作为“黑屏”判据。
 
+        只有“成功截到图且画面为黑”才算黑屏证据；截图通道异常时本轮探测无效，
+        不累计黑屏超时，连续多次异常会重建截图连接。避免出现
+        「截图通道挂掉 → 误判黑屏 → 重启模拟器 → 更慢」的雪崩。
+
         Args:
-            timeout: 最大等待秒数。
+            timeout: 最大等待秒数，默认取 APP_START_TIMEOUT。
             interval: 每轮探测的间隔秒数。
 
         Returns:
-            bool: True 表示画面已经有内容，False 表示超时仍然是黑屏。
+            bool: True 表示画面已经有内容，False 表示超时仍未就绪。
+            失败原因记录在 self.app_start_failure_reason，取值 'black' / 'probe' / 'app_not_running'。
         """
+        timeout = self.APP_START_TIMEOUT if timeout is None else timeout
         deadline = time.time() + timeout
         screenshot_method = self.screenshot_methods.get(
             self.config.script.device.screenshot_method,
             self.screenshot_adb
         )
-        logged_black = False
+
+        valid_black = 0         # 成功截图且判定为黑的次数
+        probe_fail = 0          # 连续截图异常次数
+        total_probe_fail = 0    # 截图异常总次数
+        app_down = 0            # app 不在前台的次数
+        next_black_log = 1      # 下一次打印黑屏进度所需的 valid_black
+        self.app_start_failure_reason = None
 
         while time.time() < deadline:
-            if not self.app_is_running():
+            start = time.time()
+
+            try:
+                running = self.app_is_running()
+            except Exception as e:
+                logger.info(f'Wait game start ready: foreground check failed: {e}')
+                running = None
+
+            if running is False:
+                app_down += 1
+                if app_down % 10 == 0:
+                    logger.info(f'Wait game start ready: game not in foreground, '
+                                f'checks={app_down}, elapsed={time.time() - (deadline - timeout):.1f}s')
                 time.sleep(interval)
                 continue
 
             try:
                 image = screenshot_method()
             except Exception as e:
-                logger.info(f'Wait game start ready: screenshot probe failed: {e}')
+                probe_fail += 1
+                total_probe_fail += 1
+                logger.warning(
+                    f'Wait game start ready: screenshot probe failed '
+                    f'({probe_fail}/{self.APP_START_PROBE_FAIL_LIMIT}): {e}')
+                if probe_fail >= self.APP_START_PROBE_FAIL_LIMIT:
+                    try:
+                        self.rebuild_screenshot_channel()
+                    except Exception as rebuild_error:
+                        logger.warning(f'[app-start] rebuild screenshot channel failed: {rebuild_error}')
+                    probe_fail = 0
                 time.sleep(interval)
                 continue
 
+            probe_fail = 0
             color = get_color(image, area=(0, 0, 1280, 720))
             if sum(color) >= self.APP_START_MIN_COLOR_SUM:
                 logger.info(f'Game start ready, frame color: {color}')
                 return True
 
-            if not logged_black:
-                logger.info(f'Game screen is black, keep waiting: frame color: {color}')
-                logged_black = True
+            valid_black += 1
+            # 首帧之后按指数退避打印，避免刷屏又保留进度
+            if valid_black >= next_black_log:
+                logger.info(
+                    f'Game screen is black, keep waiting: frame color: {color}, '
+                    f'black frames={valid_black}, elapsed={time.time() - (deadline - timeout):.1f}s')
+                next_black_log = max(next_black_log * 2, 20)
+
+            cost = time.time() - start
+            if cost >= self.APP_START_SLOW_ITERATION:
+                logger.warning(f'Wait game start ready: slow probe iteration took {cost:.1f}s')
             time.sleep(interval)
 
-        logger.warning(f'Wait game start ready timeout after {timeout:.0f}s, screen is still black')
+        if valid_black > 0:
+            self.app_start_failure_reason = 'black'
+            detail = f'screen is still black ({valid_black} black frames)'
+        elif total_probe_fail > 0:
+            self.app_start_failure_reason = 'probe'
+            detail = f'screenshot channel kept failing ({total_probe_fail} failures)'
+        else:
+            self.app_start_failure_reason = 'app_not_running'
+            detail = 'game process never reached foreground'
+        logger.warning(f'Wait game start ready timeout after {timeout:.0f}s, {detail}')
         return False
 
 

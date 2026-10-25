@@ -11,6 +11,8 @@ from tasks.base_task import BaseTask
 
 # 启动游戏后黑屏时，重启模拟器实例的最大尝试次数
 BLACK_SCREEN_RECOVER_ATTEMPTS = 2
+# 画面未就绪时，先只重启游戏（不动模拟器）的次数
+APP_ONLY_RESTART_ATTEMPTS = 1
 
 
 class ScriptTask(BaseTask):
@@ -40,16 +42,39 @@ class ScriptTask(BaseTask):
         logger.hr('App stop')
         self.device.app_stop()
 
+    def _login_after_ready(self) -> bool:
+        """
+        等待游戏首帧就绪后执行登录。
+
+        Returns:
+            bool: True 表示画面已就绪并完成登录；False 表示画面未就绪。
+        """
+        if not self.device.wait_app_start_ready():
+            return False
+        LoginService(config=self.config, device=self.device).app_handle_login()
+        return True
+
     def app_start(self):
         logger.hr('App start')
         self.device.app_start()
-        if self.device.wait_app_start_ready():
-            LoginService(config=self.config, device=self.device).app_handle_login()
+        if self._login_after_ready():
             return
 
-        # 启动游戏后长时间黑屏，通常是模拟器渲染 / 图形驱动异常，
-        # 重启游戏无效，需要强杀并重启模拟器实例
-        logger.warning('[black-screen] game screen stayed black after app start, recover by restarting emulator')
+        reason = getattr(self.device, 'app_start_failure_reason', None)
+        logger.warning(f'[black-screen] game not ready after app start, reason={reason}')
+
+        # 先只重启游戏：模拟器冷启动要 30s 左右，四开时还会和其它实例抢 CPU 与磁盘，
+        # 而大多数「卡在加载」只是游戏进程自身没起来，重启游戏就能恢复。
+        for attempt in range(1, APP_ONLY_RESTART_ATTEMPTS + 1):
+            logger.warning(f'[black-screen] restart app only, attempt {attempt}/{APP_ONLY_RESTART_ATTEMPTS}')
+            self.device.app_stop()
+            self.device.app_start()
+            if self._login_after_ready():
+                logger.info('[black-screen] recovered after restarting app')
+                return
+
+        # 重启游戏仍然不行，才认为模拟器渲染 / 图形驱动异常，强杀并重启模拟器实例
+        logger.warning('[black-screen] app restart did not help, recover by restarting emulator')
         self.recover_black_screen()
         LoginService(config=self.config, device=self.device).app_handle_login()
 

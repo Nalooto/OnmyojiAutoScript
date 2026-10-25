@@ -34,8 +34,10 @@ EMULATOR_ADB_STUCK_TIMEOUT = 60
 EMULATOR_STOP_TIMEOUT = 20
 # 强杀之后等待进程真正消失的时间
 EMULATOR_FORCE_KILL_TIMEOUT = 10
-# 多开时相邻两次启动的最小间隔，避免多个实例同时冷启动抢磁盘 IO
-EMULATOR_START_STAGGER = 8
+# 多开时相邻两次启动的最小间隔，避免多个实例同时冷启动抢磁盘 IO。
+# 实测单实例从下发启动命令到 adb 可用约 12s，8s 的间隔会让四开完全重叠，
+# 导致后面实例的游戏首帧迟迟渲染不出来（进而被误判黑屏），这里放宽到 15s。
+EMULATOR_START_STAGGER = 15
 # 强杀后、重新启动前的静置时间，等虚拟机磁盘锁释放
 EMULATOR_RESTART_SETTLE_SECONDS = 5
 

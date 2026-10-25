@@ -43,18 +43,47 @@ class CaptureStd:
     def __init__(self):
         self.stdout = b''
         self.stderr = b''
+        self._created_stdout = False
+        self._created_stderr = False
+
+    @staticmethod
+    def _usable(stream) -> bool:
+        """sys.stdout / sys.stderr 是否可用（能拿到 fd）。"""
+        try:
+            stream.fileno()
+            return True
+        except Exception:
+            return False
 
     def _redirect_stdout(self, to):
-        sys.stdout.close()
+        if self._usable(sys.stdout):
+            try:
+                sys.stdout.close()
+            except Exception:
+                pass
         os.dup2(to, self.fdout)
         sys.stdout = os.fdopen(self.fdout, 'w')
 
     def _redirect_stderr(self, to):
-        sys.stderr.close()
+        if self._usable(sys.stderr):
+            try:
+                sys.stderr.close()
+            except Exception:
+                pass
         os.dup2(to, self.fderr)
         sys.stderr = os.fdopen(self.fderr, 'w')
 
     def __enter__(self):
+        # 脚本进程由后端后台拉起时可能没有控制台，此时 sys.stdout/sys.stderr 为 None，
+        # 直接 fileno() 会抛 AttributeError，让截图错误路径永远失败（进而误判黑屏）。
+        # 没有可用流时临时挂到 devnull，退出时还原。
+        if not self._usable(sys.stdout):
+            sys.stdout = open(os.devnull, 'w')
+            self._created_stdout = True
+        if not self._usable(sys.stderr):
+            sys.stderr = open(os.devnull, 'w')
+            self._created_stderr = True
+
         self.fdout = sys.stdout.fileno()
         self.fderr = sys.stderr.fileno()
         self.reader_out, self.writer_out = os.pipe()
@@ -78,6 +107,22 @@ class CaptureStd:
         self.stderr = self.recvall(self.reader_err)
         os.close(self.reader_out)
         os.close(self.reader_err)
+
+        # 原来就没有 stdout/stderr，还原成 None，不要留下一个假的控制台流
+        if self._created_stdout:
+            try:
+                sys.stdout.close()
+            except Exception:
+                pass
+            sys.stdout = None
+            self._created_stdout = False
+        if self._created_stderr:
+            try:
+                sys.stderr.close()
+            except Exception:
+                pass
+            sys.stderr = None
+            self._created_stderr = False
 
     @staticmethod
     def recvall(reader, length=1024) -> bytes:
@@ -189,8 +234,10 @@ def retry(func):
             except Exception as e:
                 logger.exception(e)
 
+                # 原来这里是空实现 init()，一旦截图通道出现非预期异常（例如模拟器
+                # 实例被重启导致 rpc 连接失效）就再也不会重连，只能靠重启脚本进程恢复。
                 def init():
-                    pass
+                    self.reconnect()
 
         logger.critical(f'Retry {func.__name__}() failed')
         raise RequestHumanTakeover
