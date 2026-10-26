@@ -376,7 +376,7 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, AssetStats):
             return
         self.goto_page(page_friends_luck)
         logger.info('Start luck msg')
-        check_timer = Timer(2)
+        check_timer = Timer(4)
         check_timer.start()
         while 1:
             self.screenshot()
@@ -397,7 +397,8 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, AssetStats):
         try:
             self.goto_page(page_main)
         finally:
-            self.navigator.local_unknown_closers.remove(enter_exploration)
+            if enter_exploration in self.navigator.local_unknown_closers:
+                self.navigator.local_unknown_closers.remove(enter_exploration)
         self.config.daily_trifles.done_record.luck_msg_dt = datetime.now()
 
     def run_store(self):
