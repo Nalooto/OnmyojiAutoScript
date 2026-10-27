@@ -383,18 +383,21 @@ class ScriptTask(GameUi, GeneralBattle, DemonEncounterAssets, SwitchSoul):
                 continue
         while 1:
             self.screenshot()
+            # 购买成功后弹出的“获得奖励”是模态弹窗, 会盖住宝箱界面, 且其体力图标会被误判成 I_SUSHI, 先点掉
+            if self.ui_reward_appear_click():
+                continue
             if not self.appear(self.I_MYSTERY_AMULET) and not (box_buy_config.box_buy_sushi and self.appear(self.I_SUSHI)):
                 if self.appear_then_click(self.I_DE_FIND, interval=2.5):
                     break
             # 默认购买蓝票
             if self.appear(self.I_MYSTERY_AMULET):
                 logger.info('Buy a mystery amulet for 50 jade')
-                self.click(self.I_JADE_50)
+                self.appear_then_click(self.I_JADE_50, interval=1)
                 continue
             # 可选购买体力
             if box_buy_config.box_buy_sushi and self.appear(self.I_SUSHI):
                 logger.info('Buy one hundred sushi for 50 jade')
-                self.click(self.I_JADE_50)
+                self.appear_then_click(self.I_JADE_50, interval=1)
                 continue
 
     def _mail(self, target_click):
