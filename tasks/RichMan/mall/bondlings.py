@@ -25,7 +25,7 @@ class Bondlings(Buy, MallNavbar):
         # 购买石头
         self._bondlings_base(buy_button=self.I_BL_BUY_STONE, remain_number=self.O_BL_RES_STONE, check_class=2,
                              buy_number=con.bondling_stone, buy_max=10, buy_money=30)
-        # 购买御魂
+        # 购买御魂: 每周限购 100, 单次兑换(拉满)最多 25 个
         self._bondlings_base(buy_button=self.I_BL_BUY_SOULS, remain_number=self.O_BL_RES_SOULS, check_class=1,
                              buy_number=con.random_soul, buy_max=25, buy_money=20)
         # 购买高级盘
@@ -38,13 +38,14 @@ class Bondlings(Buy, MallNavbar):
     def _bondlings_base(self, buy_button: RuleImage, remain_number: RuleOcr, check_class: int,
                        buy_number: int, buy_max: int, buy_money: int):
         """
+        按"拉满"的方式买一种商品, 买到目标数量或本周售罄为止
 
-        :param buy_button: 对应的兑换按钮
-        :param remain_number: 对应的检查剩余数量的ocr
-        :param check_money: 对应的检查剩余金钱的第一个
-        :param buy_number: 购买多少
-        :param buy_max: 这一个种类一次性最多购买多少
-        :param buy_money: 每一个购买的钱数
+        :param buy_button: 该商品的兑换按钮
+        :param remain_number: 商品上方 "每周限购 N" 标签的 OCR, 读到的是**本周上限**而不是实时剩余
+        :param check_class: 预留参数, 当前未使用
+        :param buy_number: 本周打算买多少个
+        :param buy_max: 一次兑换最多能买多少个(拉满时的单次上限)
+        :param buy_money: 每个需要多少契灵币
         :return:
         """
         logger.hr(buy_button.name, 3)
@@ -53,57 +54,43 @@ class Bondlings(Buy, MallNavbar):
             return
         self.screenshot()
 
-        # if buy_button.name == 'BONDLINGS_BL_BUY_SOULS':
-        #     if self.appear(self.I_ME_SOULS_NEW):
-        #         # 契灵御魂已经买光
-        #         logger.warning('本周契灵御魂已经买光')
-        #         return
-        # pos = self.O_BL_RES_SOULS_new.ocr_full(self.device.image)
-
         # 检查是否出现了购买按钮
         if not self.appear(buy_button):
             logger.warning('Buy button is not appear')
             return
-        # 检查剩余数量
-        _remain = remain_number.ocr(self.device.image)
-        if _remain == 0:
+        # 这个 OCR 读到的是"每周限购 N"的 N(本周上限), 不是实时剩余数量, 只用来兜底防止无限买
+        weekly_limit = remain_number.ocr(self.device.image)
+        if weekly_limit == 0:
             logger.warning('本周契灵御魂已经买光')
             return
-        if _remain < buy_number:
-            logger.warning(f'Remain number is {_remain}, buy number is {buy_number}')
-            buy_number = _remain
+        if weekly_limit < buy_number:
+            logger.warning(f'Weekly limit is {weekly_limit}, buy number is {buy_number}')
+            buy_number = weekly_limit
         # 检查金钱
         cu, re, total = self.O_BL_CHECK_MONEY.ocr(self.device.image)
         if cu + re != total:
             logger.warning('Check money is error')
             logger.warning(f'cu: {cu}, re: {re}, total: {total}')
             return
-        money_enough = cu >= buy_money * buy_number
-        if not money_enough:
+        if cu < buy_money * buy_number:
             logger.warning(f'Money is not enough {cu}')
             # 判断够不够买2个
             if cu < buy_money * 2:
                 logger.warning('Money is not enough 2')
                 return
             buy_number = cu // buy_money
-        # 购买
-        logger.info(f'Buy number is {buy_number}')
-        if buy_number >= buy_max:
-            buy_cycles_number = buy_number // buy_max
-            buy_res_number = buy_number % buy_max
-        else:
-            buy_cycles_number = None
-            buy_res_number = buy_number
-
-        if buy_cycles_number:
-            for i in range(buy_cycles_number):
-                self.buy_more(buy_button)
-                self.device.click_record_clear()
-                time.sleep(0.5)
-        if buy_res_number:
-            self.buy_more(buy_button, buy_res_number)
+        # 拉满购买: 每轮最多买 buy_max 个, 兑换按钮点不出购买框就说明本周已经售罄
+        buy_rounds = (buy_number + buy_max - 1) // buy_max
+        logger.info(f'Buy number is {buy_number}, per purchase {buy_max}, rounds {buy_rounds}')
+        bought = 0
+        for i in range(buy_rounds):
+            if not self.buy_more(buy_button, max_try=3):
+                logger.warning(f'第 {i + 1} 轮兑换没弹出购买框, 判定本周已经售罄, 结束该商品')
+                break
+            bought += buy_max
             self.device.click_record_clear()
             time.sleep(0.5)
+        logger.info(f'{buy_button.name} 本次共兑换约 {bought} 个(目标 {buy_number})')
 
 
 if __name__ == '__main__':
