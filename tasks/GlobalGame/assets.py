@@ -31,6 +31,12 @@ class GlobalGameAssets:
 	I_CLIENT_CLEAR = RuleImage(roi_front=(578,369,151,72), roi_back=(578,369,151,72), threshold=0.8, method="Template matching", file="./tasks/GlobalGame/gg/gg_client_clear.png")
 	# description 
 	I_CHAT_CLOSE_BUTTON = RuleImage(roi_front=(632,343,49,103), roi_back=(632,343,49,103), threshold=0.8, method="Template matching", file="./tasks/GlobalGame/gg/gg_chat_close_button.png")
+	#  
+	I_NG_ACCEPT = RuleImage(roi_front=(846,476,56,46), roi_back=(814,430,117,110), threshold=0.8, method="Template matching", file="./tasks/GlobalGame/gg/gg_ng_accept.png")
+	#  
+	I_NG_REJECT = RuleImage(roi_front=(846,562,53,51), roi_back=(819,536,108,101), threshold=0.8, method="Template matching", file="./tasks/GlobalGame/gg/gg_ng_reject.png")
+	#  
+	I_NG_IGNORE = RuleImage(roi_front=(863,80,21,21), roi_back=(849,65,48,48), threshold=0.8, method="Template matching", file="./tasks/GlobalGame/gg/gg_ng_ignore.png")
 
 
 	# Click Rule Assets
