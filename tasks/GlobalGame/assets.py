@@ -16,11 +16,11 @@ class GlobalGameAssets:
 	# 拒绝 
 	I_G_REJECT = RuleImage(roi_front=(832,508,53,51), roi_back=(808,480,108,101), threshold=0.8, method="Template matching", file="./tasks/GlobalGame/gg/gg_g_reject.png")
 	# 勾玉 
-	I_G_JADE = RuleImage(roi_front=(661,466,43,46), roi_back=(661,466,43,46), threshold=0.8, method="Template matching", file="./tasks/GlobalGame/gg/gg_g_jade.png")
+	I_G_JADE = RuleImage(roi_front=(661,466,43,46), roi_back=(650,450,90,120), threshold=0.8, method="Template matching", file="./tasks/GlobalGame/gg/gg_g_jade.png")
 	# 猫粮 
-	I_G_CAT_FOOD = RuleImage(roi_front=(565,463,59,65), roi_back=(565,463,59,65), threshold=0.8, method="Template matching", file="./tasks/GlobalGame/gg/gg_g_cat_food.png")
+	I_G_CAT_FOOD = RuleImage(roi_front=(565,463,59,65), roi_back=(552,450,95,120), threshold=0.8, method="Template matching", file="./tasks/GlobalGame/gg/gg_g_cat_food.png")
 	# 狗粮 
-	I_G_DOG_FOOD = RuleImage(roi_front=(565,464,60,63), roi_back=(565,464,60,63), threshold=0.8, method="Template matching", file="./tasks/GlobalGame/gg/gg_g_dog_food.png")
+	I_G_DOG_FOOD = RuleImage(roi_front=(565,464,60,63), roi_back=(552,450,95,120), threshold=0.8, method="Template matching", file="./tasks/GlobalGame/gg/gg_g_dog_food.png")
 	# 忽略 
 	I_G_IGNORE = RuleImage(roi_front=(773,116,21,21), roi_back=(759,102,48,48), threshold=0.8, method="Template matching", file="./tasks/GlobalGame/gg/gg_g_ignore.png")
 	# 网络异常 
@@ -36,7 +36,7 @@ class GlobalGameAssets:
 	#  
 	I_NG_REJECT = RuleImage(roi_front=(846,562,53,51), roi_back=(819,536,108,101), threshold=0.8, method="Template matching", file="./tasks/GlobalGame/gg/gg_ng_reject.png")
 	#  
-	I_NG_IGNORE = RuleImage(roi_front=(863,80,21,21), roi_back=(849,65,48,48), threshold=0.8, method="Template matching", file="./tasks/GlobalGame/gg/gg_ng_ignore.png")
+	I_NG_IGNORE = RuleImage(roi_front=(863,80,21,21), roi_back=(760,55,180,80), threshold=0.8, method="Template matching", file="./tasks/GlobalGame/gg/gg_ng_ignore.png")
 
 
 	# Click Rule Assets
