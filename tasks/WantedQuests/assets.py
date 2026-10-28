@@ -133,6 +133,8 @@ class WantedQuestsAssets:
 	I_WQ_TRACE_ONE_REALWORLD = RuleImage(roi_front=(850,470,180,180), roi_back=(850,470,180,180), threshold=0.8, method="Template matching", file="./tasks/WantedQuests/wq/wq_trace_one_realworld.png")
 	# 探索界面,左侧任务列表右上角右下角标志 
 	I_WQ_LIST_TOP_BOTTOM_CHECK = RuleImage(roi_front=(120,125,25,425), roi_back=(120,125,25,425), threshold=0.8, method="Template matching", file="./tasks/WantedQuests/wq/wq_list_top_bottom_check.png")
+	# 悬赏详细页的退出 
+	I_EXIT = RuleImage(roi_front=(1189,111,36,36), roi_back=(1189,111,36,36), threshold=0.8, method="Template matching", file="./tasks/WantedQuests/wq/wq_exit.png")
 
 
 	# Ocr Rule Assets
