@@ -295,6 +295,51 @@ class ScriptTask(WQExplore, SecretScriptTask, WantedQuestsAssets):
         self.ui_click_until_smt_disappear(self.C_WQ_TRACE_ONE_CLOSE, stop=self.I_WQ_TRACE_ONE_CHECK_OPENED,
                                           interval=1.5)
 
+    def cancel_trace(self, timeout: float = 6) -> bool:
+        """取消当前悬赏的追踪(详情页右下角的菱形按钮)
+
+        新 UI 的这个按钮是「这条悬赏」的追踪开关: 已追踪显示「取消追踪」,
+        未追踪显示「追踪」。没有可挑战目标的神秘妖怪则完全没有这个按钮,
+        所以"看不到按钮"必须当成正常分支, 不能死等(旧代码就是这么卡死的)。
+        """
+        timer = Timer(timeout).start()
+        missing = 0
+        clicked = False
+        while not timer.reached():
+            self.screenshot()
+            if not self.appear(WantedQuestsAssets.I_EXIT):
+                # 详情页已经关了, 没有可取消的东西
+                return clicked
+            if self.appear(self.I_TRACE_DISABLE):
+                missing = 0
+                if clicked:
+                    # 点过还在, 说明不生效, 不再连点
+                    break
+                self.click(self.I_TRACE_DISABLE, interval=1)
+                clicked = True
+                continue
+            missing += 1
+            if clicked and missing >= 2:
+                logger.info('Wanted quest trace canceled')
+                return True
+            if not clicked and missing >= 3:
+                logger.info('Current wanted quest is not traced or has no trace button, skip cancel')
+                return False
+            sleep(0.3)
+        logger.warning('Cancel trace not confirmed, close the page anyway')
+        return False
+
+    def skip_current_wq(self) -> bool:
+        """跳过当前悬赏: 先取消它的追踪, 再关掉详情页, 并在本轮内不再选中这一条
+
+        旧版靠列表里的「追踪蓝勾」(wq_trace_true) 取消追踪, 该素材已随 UI 更新废弃,
+        目标永远不出现 → ui_click 空转到 GameStuckError(2026-10-29 18:08 / 18:11 两次)。
+        新 UI 的等价操作是详情页右下角的「取消追踪」; 神秘妖怪没有该按钮, 只关面板。
+        """
+        self.cancel_trace()
+        self.close_unsupported_wq()
+        return False
+
     def execute_mission(self, num_want: int):
         """
         执行对应的悬赏任务
@@ -305,20 +350,17 @@ class ScriptTask(WQExplore, SecretScriptTask, WantedQuestsAssets):
         if not self.appear(self.I_GOTO_1):
             # 如果没有出现 '前往'按钮， 那就是这个可能是神秘任务但是没有解锁
             logger.info('This is a secret mission but not unlock')
-            self.ui_click(self.I_TRACE_TRUE, self.I_TRACE_FALSE)
-            return False
+            return self.skip_current_wq()
         # 跳过不想打的
         monster_name = self.O_WQ_MONSTER_TYPE.detect_text(self.device.image)
         if monster_name in self.unwanted_boss_name_list:
             logger.warning(f'unwanted {monster_name}')
-            self.ui_click(self.I_TRACE_TRUE, self.I_TRACE_FALSE)
-            return False
+            return self.skip_current_wq()
         # 获取排序后的悬赏信息列表
         ordered_wq_infos = self.get_ordered_wq_infos(num_want)
         if not ordered_wq_infos:
             logger.info('Current wanted quest skipped all, cancel it')
-            self.ui_click(self.I_TRACE_TRUE, self.I_TRACE_FALSE)
-            return False
+            return self.skip_current_wq()
         wq_call_dict: dict[WQType, Callable] = {
             WQType.CHALLENGE: self.challenge,
             WQType.EXPLORE: self.explore,
@@ -328,8 +370,7 @@ class ScriptTask(WQExplore, SecretScriptTask, WantedQuestsAssets):
         wq_info = self.get_need_exec_wq(ordered_wq_infos)
         if not wq_info:
             logger.info('Current wanted quests can not be executed')
-            self.ui_click(self.I_TRACE_TRUE, self.I_TRACE_FALSE)
-            return False
+            return self.skip_current_wq()
         try:
             logger.info(f'Choose wq: {wq_info}')
             wq_call_dict[wq_info.type](wq_info.goto_btn, wq_info.do_num)
@@ -381,29 +422,51 @@ class ScriptTask(WQExplore, SecretScriptTask, WantedQuestsAssets):
         :param info_rule: 悬赏信息
         :param goto_btn_rule: 前往按钮
         :param num_want: 想要攻击的数量
-        :return: WQInfo
+        :return: 解析失败返回 None
+
+        小字号下 OCR 会偶发吞掉「数量」后面的数字(例: "第二十七章(数量:)。",
+        实际是 数量:8), 而同一帧反复识别结果不会变, 必须重新截图再试。
+        2026-10-29 18:05 / 18:10 两次失败就是 4 行里有 3 行丢数字 → 全部跳过 → 卡死;
+        同一条在 08:16 就识别正确并正常执行, 说明是随机的识别抖动, 重试即可恢复。
+        """
+        for attempt in range(3):
+            wq_info, error, retryable = self.parse_wq_info(type_rule, info_rule, goto_btn_rule, num_want)
+            if wq_info is not None:
+                if attempt:
+                    logger.info(f'WQ row OCR recovered after {attempt} retry')
+                return wq_info
+            if not retryable or attempt >= 2:
+                logger.warning(error)
+                return None
+            self.screenshot()
+        return None
+
+    def parse_wq_info(self, type_rule: RuleOcr, info_rule: RuleOcr, goto_btn_rule: RuleImage,
+                      num_want: int) -> tuple[Optional[WQInfo], str, bool]:
+        """
+        解析单条悬赏信息(不重试、不打日志)
+        :return: (解析结果, 失败原因, 是否值得重新截图重试)
         """
         wq_type_txt = type_rule.ocr(self.device.image)
         # 适配老逻辑, 将式神碎片改为挑战
         wq_type_txt = '挑战' if wq_type_txt == '式神' else wq_type_txt
         if wq_type_txt == '' or not WQType.contains(wq_type_txt):
-            logger.warning(f'Unknown wq type: {wq_type_txt}')
-            return None
+            return None, f'Unknown wq type: {wq_type_txt}', True
         wq_type = WQType(wq_type_txt)
         type_ordered_list = self.get_config()._wq_type_ordered_list
         if wq_type not in type_ordered_list:
-            logger.warning(f'{wq_type.value} is not in the order list')
-            return None
+            # 配置里不让打这一类, 重试也没用
+            return None, f'{wq_type.value} is not in the order list', False
         wq_info_txt = info_rule.ocr(self.device.image)
         wq_info_txt = wq_info_txt.replace('：', ':').replace('（', '(').replace('）', ')')
         import re
-        match = re.search(r"(.+?)\s*\(?[数教]量[:：]\s*(\d+)", wq_info_txt)
+        # 数量后的冒号有时会连着数字一起被吞掉(如 "荒川之怒·捌(数量5)"), 所以冒号可选
+        match = re.search(r"(.+?)\s*\(?[数教]量:?\s*(\d+)", wq_info_txt)
         if not match:
-            logger.warning(f'Unknown wq info: {wq_info_txt}')
-            return None
+            return None, f'Unknown wq info: {wq_info_txt}', True
         wq_dest, wq_number = match.group(1).strip(), int(match.group(2))
         do_num = num_want // wq_number + (num_want % wq_number > 0)
-        return WQInfo(wq_type, wq_dest, wq_number, goto_btn_rule, do_num)
+        return WQInfo(wq_type, wq_dest, wq_number, goto_btn_rule, do_num), '', False
 
     def challenge(self, goto_btn, num):
         self.ui_click(goto_btn, self.I_WQC_FIRE)
