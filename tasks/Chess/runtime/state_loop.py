@@ -70,6 +70,8 @@ class ChessStateLoopMixin:
     def _start_chess_game(self) -> None:
         self.chess_state.begin_game()
         self.chess_events.reset()
+        # 新一局从“一阶”重新开始，上一局的阶数不能作为 OCR 失败时的回退值。
+        self._last_known_level = None
         logger.info(f'Chess state: begin game {self.chess_state.game_number}')
         super()._start_chess_game()
 

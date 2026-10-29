@@ -689,13 +689,42 @@ class ChessRoundStateMixin:
         }
 
     def _read_level(self) -> int | None:
-        """读取“一阶”至“九阶”，同时兼容阿拉伯数字显示。"""
-        raw = self._normalize_ocr_text(self.O_LEVEL.ocr(self.device.image))
+        """读取“一阶”至“九阶”，同时兼容阿拉伯数字显示。
+
+        上阵/卖卡拖拽刚结束时，左下角阶数徽章会被落点动画盖住几百毫秒，
+        单帧 OCR 只返回空串。旧实现据此返回 None，让上阵循环以
+        “lineup capacity could not be confirmed” 直接 break —— 每个备
+        阶段最多只上阵一张卡，手牌随即堆到 10 张上限（2026-10-29 oas2）。
+        这里改为先重拍一两帧；仍然读不到才回退本局最近一次阶数：阶数
+        只会因“购买经验”上升，用旧值最多多试一次上阵，不会突破上限。
+        """
+        raw = ''
+        for delay in (0, *self.LEVEL_OCR_RETRY_DELAYS):
+            if delay:
+                time.sleep(delay)
+                self.screenshot()
+            raw = self._normalize_ocr_text(self.O_LEVEL.ocr(self.device.image))
+            level = self._parse_level(raw)
+            if level is not None:
+                self._last_known_level = level
+                logger.debug(f'Chess level: [{raw}] -> {level}')
+                return level
+
+        logger.warning(f'Chess level OCR invalid: [{raw}]')
+        cached = getattr(self, '_last_known_level', None)
+        if cached is not None:
+            logger.warning(
+                'Chess level unreadable, fall back to last known level: '
+                f'{cached}'
+            )
+        return cached
+
+    @staticmethod
+    def _parse_level(raw: str) -> int | None:
+        """把“八阶”“8”一类文本解析成 1-9 的阶数；解析失败返回 None。"""
         digit = re.search(r'([1-9])', raw)
         if digit is not None:
-            level = int(digit.group(1))
-            logger.debug(f'Chess level: [{raw}] -> {level}')
-            return level
+            return int(digit.group(1))
 
         chinese_digits = {
             '一': 1,
@@ -710,10 +739,7 @@ class ChessRoundStateMixin:
         }
         for character, level in chinese_digits.items():
             if character in raw:
-                logger.debug(f'Chess level: [{raw}] -> {level}')
                 return level
-
-        logger.warning(f'Chess level OCR invalid: [{raw}]')
         return None
 
     def _read_remaining_time(self) -> int | None:

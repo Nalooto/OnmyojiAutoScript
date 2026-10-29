@@ -25,6 +25,8 @@ class ChessRuntimeSettings:
     SLOW_POLL_INTERVAL = 1.0
     ACTION_ICON_WAIT_TIMEOUT = 3.0
     ACTION_ICON_MAX_ATTEMPTS = 3
+    # 阶数徽章会被上阵/卖卡的落点动画遮住几百毫秒，OCR 需要重拍再判。
+    LEVEL_OCR_RETRY_DELAYS = (0.3, 0.6)
     # 首领挑战会大幅改变棋盘显示位置，固定站位的勾玉检测框不可用。
     BOSS_CHALLENGE_ROUNDS = frozenset({9, 15, 21, 27, 33})
     HAND_DEPLOY_SAFETY_LIMIT = 20

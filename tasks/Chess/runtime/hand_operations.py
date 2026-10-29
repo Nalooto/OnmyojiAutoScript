@@ -23,6 +23,9 @@ from tasks.Chess.strategy.shikigami_catalog import (
     resolve_shikigami,
 )
 
+# 所有卖卡拖拽共用同一个点击记录名；确认成功后要按名字从连点保护里剔除。
+SELL_HAND_CARD_CLICK_NAME = 'CHESS_SELL_UNKNOWN_HAND_CARD'
+
 
 class ChessHandOperationsMixin:
     """Internal mixin; use through ``ScriptTask`` only."""
@@ -125,9 +128,20 @@ class ChessHandOperationsMixin:
             hold_duration=(0.2, 0.3),
             point_random=(-3, -3, 3, 3),
             swipe_duration=0.5,
-            name='CHESS_SELL_UNKNOWN_HAND_CARD',
+            name=SELL_HAND_CARD_CLICK_NAME,
         )
         self.close_shikigami_specifics_if_open()
+
+    def forget_confirmed_sale_click(self) -> None:
+        """卖卡已由手牌张数确认后，把这次拖拽移出连点保护记录。
+
+        与购买成功、开关商店、刷新商店的处理保持一致：一局棋里卖卡是
+        高频正常操作，若每次成功都留在 15 格窗口内，就会出现“6 次卖卡 +
+        6 次商店格点击”而命中“两个按钮各 6 次”的连点保护，任务直接
+        GameTooManyClickError 终止（2026-10-29 oas2 08:46:40）。
+        未确认的卖卡仍然保留在记录里，真正的重复拖拽依旧会被拦下。
+        """
+        self.device.click_record_remove(SELL_HAND_CARD_CLICK_NAME)
 
     def _wait_hand_card_removed(self, count_before: int, count_cards) -> bool:
         """按新截图确认手牌数量减少，处理误开的详情页，不固定空等。"""
@@ -221,6 +235,7 @@ class ChessHandOperationsMixin:
             'Emergency Chess lineup-card sale confirmed: '
             f'count={count_before}->{count_after}'
         )
+        self.forget_confirmed_sale_click()
         return {
             'type': 'lineup',
             'name': identity['name'],
@@ -425,9 +440,11 @@ class ChessHandOperationsMixin:
         self,
         card_roi: tuple[int, int, int, int],
     ) -> dict | None:
-        """确认指定手牌框是否为守护之印，用于卖卡保护。"""
-        if self._hakuzosu_protect_target_position() is None:
-            return None
+        """确认指定手牌框是否为守护之印，用于卖卡保护。
+
+        卖卡保护不跟随阵容配置：守护之印是当局特殊道具, 无法出售,
+        只要模板命中就必须保留, 否则清理会反复出售同一张卡直到连点保护。
+        """
         matches = self.hakuzosu_protect_rule.match_all_any(
             self.device.image,
             roi=list(card_roi),
@@ -1527,6 +1544,7 @@ class ChessHandOperationsMixin:
                     ),
                 ):
                     sold.append(badge_target['position'])
+                    self.forget_confirmed_sale_click()
                 clean_confirm_frames = 0
                 continue
 
@@ -1632,6 +1650,7 @@ class ChessHandOperationsMixin:
                 sold.append(sell_target['position'])
                 failed_sale_attempts.pop(sale_key, None)
                 clean_confirm_frames = 0
+                self.forget_confirmed_sale_click()
                 logger.info(
                     'Chess card sale confirmed: '
                     f'type={sell_target["type"]}, '
@@ -1913,10 +1932,11 @@ class ChessHandOperationsMixin:
                 )
                 before = self._hand_card_identity_count('emblem', latest['name'])
                 self.sell_hand_card(latest['position'])
-                self._wait_hand_card_removed(
+                if self._wait_hand_card_removed(
                     before,
                     lambda: self._hand_card_identity_count('emblem', latest['name']),
-                )
+                ):
+                    self.forget_confirmed_sale_click()
         return equipped
 
     def _find_badge_hand_card(self) -> dict | None:
