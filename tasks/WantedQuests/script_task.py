@@ -119,22 +119,33 @@ class ScriptTask(WQExplore, SecretScriptTask, WantedQuestsAssets):
         新 UI 的详情页不再显示追踪蓝勾，改为「前往」按钮作为
         已进入详情页的标志；该按钮只在悬赏详情页出现。
 
-        「神秘妖怪」悬赏的详情页只有线索和进度, 既没有悬赏类型文案也没有「前往」
-        按钮, oas 无法执行。这里只做判断并返回 False, 由调用方负责关闭面板、跳过该悬赏。
+        「神秘妖怪」悬赏有两种形态: 带悬赏类型行的可以用「前往」去打(能执行),
+        只有线索的没有任何「前往」按钮(oas 无法执行)。面板是淡入的, 左侧印章比
+        右侧「前往」先渲染出来, 所以读到「神秘妖怪」时不能立刻判定不支持, 否则会把
+        能打的神秘妖怪悬赏误跳过(2026-10-28 18:10 就因此跳过了 0/14 的丑时之女)。
+        这里只停止继续点击, 静等「前往」出现, 超时仍没有才算不支持。
         """
         timeout_timer = Timer(5).start()
+        clicked = False
         while not timeout_timer.reached():
             self.screenshot()
-            if self.appear(self.I_GOTO_1) or self.appear(self.I_GOTO_2):
+            if (self.appear(self.I_GOTO_1) or self.appear(self.I_GOTO_2)
+                    or self.appear(self.I_GOTO_3) or self.appear(self.I_GOTO_4)):
                 return True
-            if self.is_mystery_wq():
-                logger.warning('This is a mystery wanted quest, skip it')
-                return False
+            if clicked and self.is_mystery_wq():
+                # 已读到「神秘妖怪」印章: 等动画把「前往」渲染出来, 不再点击
+                sleep(0.4)
+                continue
             self.click(self.O_WQ_TEXT_ALL, interval=1.2)
+            clicked = True
         return False
 
     def is_mystery_wq(self) -> bool:
-        """当前详情页是否是「神秘妖怪」悬赏(只有线索, 没有悬赏类型文案和「前往」按钮)"""
+        """当前详情页是否是「神秘妖怪」悬赏
+
+        注意: 印章只说明这是神秘妖怪悬赏, 并不等于不可执行——带悬赏类型行的
+        神秘妖怪悬赏同样可以打。是否可执行由「前往」按钮决定, 见 open_wq_info。
+        """
         monster_name = self.O_WQ_MONSTER_TYPE.detect_text(self.device.image)
         return '神秘' in monster_name
 
