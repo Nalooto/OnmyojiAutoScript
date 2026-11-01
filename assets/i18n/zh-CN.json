@@ -286,5 +286,15 @@
   "min_fish_value_help": "只蹭体力收益不低于此值的斗鱼卡（5星118-134，6星134-151），0为不限制",
   "save_touch_fish": "惠比寿的摸鱼行动",
   "save_touch_fish_help": "默认使用全部存储按钮，主要目的是为了配合真蛇每周打一次即可获得俩次奖励(并不会节省体力)",
-  "hyakki_draft_enabled": "百鬼优先所需御魂"
+  "hyakki_draft_enabled": "百鬼优先所需御魂",
+  "handoff1": "交替·本次队长",
+  "handoff2": "交替·本次队员",
+  "check_enable": "检查契忆数量",
+  "limit_num": "契忆数量上限",
+  "bondling_search_enable": "没有契灵时自动探查",
+  "search_switch": "探查御魂装配分组",
+  "bondling_2_1_switch": "针女御魂装配分组",
+  "bondling_2_2_switch": "薙魂御魂装配分组",
+  "bondling_2_3_switch": "月魔兔御魂装配分组",
+  "bondling_2_4_switch": "狐火御魂装配分组"
 }

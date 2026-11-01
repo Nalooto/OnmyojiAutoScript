@@ -45,7 +45,10 @@ class UserStatus(str, Enum):
     LEADER = 'leader'
     MEMBER = 'member'
     ALONE = 'alone'
+    # handoff: 一次任务只使用同一个身份执行, 任务结束后自动切换(队长<->队员)
+    # 本次任务为队长, 任务结束后自动切换为队员
     handoff1 = 'handoff1'
+    # 本次任务为队员, 任务结束后自动切换为队长
     handoff2 = 'handoff2'
     # WILD = 'wild'  # 还不打算实现
 
