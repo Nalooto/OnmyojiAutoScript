@@ -16,6 +16,7 @@ from module.server.log_router import log_app
 from module.server.script_router import script_app
 from module.server.stats_router import stats_app
 from module.server.tool_router import tool_app
+from module.server.chesslineup_router import chesslineup_app
 from starlette import status
 from starlette.responses import JSONResponse
 from module.server.setting import State
@@ -53,6 +54,12 @@ app.include_router(tool_app)
 annotator_static_dir = Path(__file__).resolve().parent / "web" / "annotator" / "static"
 if annotator_static_dir.exists():
     app.mount("/tool/annotator/static", StaticFiles(directory=str(annotator_static_dir)), name="annotator_static")
+
+# 百鬼棋局阵容编辑工具：前端静态资源缺失时仍保留 API 路由
+app.include_router(chesslineup_app)
+chesslineup_static_dir = Path(__file__).resolve().parent / "web" / "chesslineup" / "static"
+if chesslineup_static_dir.exists():
+    app.mount("/tool/chesslineup/static", StaticFiles(directory=str(chesslineup_static_dir)), name="chesslineup_static")
 
 
 async def on_startup():
