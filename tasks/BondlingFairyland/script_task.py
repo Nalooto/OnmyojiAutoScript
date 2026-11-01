@@ -34,6 +34,7 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
 
     last_plate_count: int = None  # 上一次识别到的契灵盘子数量
     plate_interval: int = None  # 契灵盘子数量间隔(一般为1)
+    current_user_status: UserStatus = UserStatus.ALONE  # 本次任务实际使用的身份
 
     def _exit_matcher(self) -> ExitMatcher | None:
         return any_of(self.I_BALL_FIRE, self.I_CHECK_BONDLING_FAIRYLAND, self.I_GI_EMOJI_1, self.I_GI_EMOJI_2)
@@ -74,6 +75,39 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
         context.is_win = is_win
         return ret
 
+    def resolve_user_status(self) -> UserStatus:
+        """解析本次任务实际使用的身份
+
+        handoff 策略: 一次任务只用一个身份从头执行到尾, 等任务结束后再切换身份
+        handoff1 -> 本次队长, 任务结束后切换为队员
+        handoff2 -> 本次队员, 任务结束后切换为队长
+        """
+        raw_status = self.config.bondling_fairyland.bondling_config.user_status
+        match raw_status:
+            case UserStatus.handoff1:
+                self.current_user_status = UserStatus.LEADER
+            case UserStatus.handoff2:
+                self.current_user_status = UserStatus.MEMBER
+            case _:
+                self.current_user_status = raw_status
+        logger.info(f'User status: {raw_status.value} -> {self.current_user_status.value}')
+        return self.current_user_status
+
+    def switch_handoff_status(self) -> None:
+        """handoff 策略: 把下一次任务的身份写回配置, 实现 队长->队员 / 队员->队长 的交替"""
+        bondling_config = self.config.bondling_fairyland.bondling_config
+        current_status = bondling_config.user_status
+        next_status = {
+            UserStatus.handoff1: UserStatus.handoff2,
+            UserStatus.handoff2: UserStatus.handoff1,
+        }.get(current_status)
+        if next_status is None:
+            return
+        bondling_config.user_status = next_status
+        self.config.save()
+        logger.info(f'Handoff: 本次任务身份 {self.current_user_status.value}, '
+                    f'下次任务身份 {next_status.value}')
+
     def click_fire(self):
         # 队友进房后、点开始挑战前, 采样房间锁定状态(契灵锁定后系统会自动开战)
         self.screenshot()
@@ -106,6 +140,8 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
                 self.set_next_run(task='BondlingFairyland', finish=True, success=True)
                 raise TaskEnd
             logger.info(f'契忆数量: {cu} 小于 {MAX_COUNT}, 继续任务')
+        # 解析本次任务身份: handoff 为整轮任务一体执行, 任务结束后再切换(队长<->队员)
+        self.resolve_user_status()
         logger.hr('第二步, 切换御魂', 2)
         self.switch_soul()
         logger.hr('第三步, 前往契灵主界面', 2)
@@ -117,29 +153,22 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
         self.goto_ball_area(BondlingClass.get_index(cong.bondling_config.bondling_stone_class))
 
         if cong.bondling_config.bondling_mode == BondlingMode.MODE1:  # model1只刷探查
-            if cong.bondling_config.user_status != UserStatus.ALONE:
+            if self.current_user_status != UserStatus.ALONE:
                 raise ValueError(
-                    f'Now is model1, but user status is not alone, current: {cong.bondling_config.user_status.value}')
+                    f'Now is model1, but user status is not alone, current: {self.current_user_status.value}')
             self.run_search(cong.bondling_config)
             self.goto_page(page_main)
             self.set_next_run(task='BondlingFairyland', finish=True, success=True)
             raise TaskEnd
-        match cong.bondling_config.user_status:
-            case UserStatus.handoff1:
-                self.limit_count //= 2
-                self.switch_ball()
-            case UserStatus.handoff2:
-                self.limit_count //= 2
-                self.run_member()
-                self.current_count = 0
-                self.goto_page(page_bondling_fairyland)
-                self.switch_ball()
+        # 本次任务即将开始, 把下一次任务的身份写回配置: 队长->队员 / 队员->队长
+        self.switch_handoff_status()
+        match self.current_user_status:
             case UserStatus.LEADER | UserStatus.ALONE:
                 self.switch_ball()
             case UserStatus.MEMBER:
                 self.run_member()
             case _:
-                logger.error(f'Unknown user status: {cong.bondling_config.user_status}')
+                logger.error(f'Unknown user status: {self.current_user_status}')
 
     def run_leader(self):
         """  点击 求援， 组队模式  """
@@ -268,10 +297,7 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
             pass
 
         self.goto_page(page_bondling_fairyland)
-        # 引用配置
-        if UserStatus.handoff1 == self.config.bondling_fairyland.bondling_config.user_status:
-            self.current_count = 0
-            self.run_member()
+        # handoff 不再在一次任务内切换身份, 本次任务(队长)到此结束
         self.goto_page(page_main)
         self.set_next_run(task='BondlingFairyland', finish=True, success=True)
         raise TaskEnd
@@ -336,11 +362,10 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
             # 如果还在战斗中，就退出战斗
             if self.exit_battle():
                 pass
-                # 引用配置
-        if UserStatus.MEMBER == self.config.bondling_fairyland.bondling_config.user_status:
-            self.goto_page(page_main)
-            self.set_next_run(task='BondlingFairyland', finish=True, success=True)
-            raise TaskEnd
+        # 本次任务(队员)到此结束, handoff 在下一次任务开始时再切换身份
+        self.goto_page(page_main)
+        self.set_next_run(task='BondlingFairyland', finish=True, success=True)
+        raise TaskEnd
 
     def switch_ball(self):
         logger.hr('Start switch ball', 2)
@@ -363,7 +388,7 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
                 else:
                     if self.run_stone(bondling_config.bondling_stone_enable):
                         continue
-                    elif bondling_config.bondling_search_enable and bondling_config.user_status == UserStatus.ALONE:
+                    elif bondling_config.bondling_search_enable and self.current_user_status == UserStatus.ALONE:
                         if self.run_search(bondling_config, limit_cnt=random.randint(5, 20)):
                             logger.info('Bondling search finish, try to run catch')
                             continue
@@ -506,8 +531,7 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
                 return False
 
             # 引用配置
-            cong = self.config.bondling_fairyland
-            match cong.bondling_config.user_status:
+            match self.current_user_status:
                 case UserStatus.ALONE:
                     if not self.run_alone():
                         # TODO 不知为何无法识别，但会自动切换页面，不用也行
@@ -784,7 +808,7 @@ class ScriptTask(GameUi, GeneralInvite, GeneralRoom, GeneralBattle, SwitchSoul, 
         type_str, (group, team) = bondling_switch_soul.get_switch_by_enum(bondling_config.bondling_stone_class)
         do_switch_soul(type_str, group, team)
         # 启用了刷契灵时开启探查且是单人模式
-        if bondling_config.bondling_search_enable and bondling_config.user_status == UserStatus.ALONE:
+        if bondling_config.bondling_search_enable and self.current_user_status == UserStatus.ALONE:
             type_str, (group, team) = bondling_switch_soul.get_switch_by_name('search_switch')
             do_switch_soul(type_str, group, team)
 
