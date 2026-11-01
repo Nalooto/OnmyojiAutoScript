@@ -41,8 +41,12 @@ class ChessConfig(ConfigBase):
     @classmethod
     def migrate_removed_lineup(cls, value):
         raw = getattr(value, 'value', value)
-        if raw in {'流火', '冥府', '大江山', '狐妖', '荒川',
-                   'liuhuo', 'mingfu', 'dajiangshan', 'huyao', 'arakawa'}:
+        # 荒川体系已随 JSON 注册表回归（键 huangchuan），旧键 arakawa 迁移到它，
+        # 不能再按「已移除羁绊」丢回七角山，否则 OASX 选择荒川后会被静默改写。
+        if raw == 'arakawa':
+            return LineupBond.HUANGCHUAN
+        if raw in {'流火', '冥府', '大江山', '狐妖',
+                   'liuhuo', 'mingfu', 'dajiangshan', 'huyao'}:
             return LineupBond.QIJIAOSHAN
         return value
 
