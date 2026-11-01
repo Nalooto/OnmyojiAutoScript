@@ -5,7 +5,7 @@ import time
 import cv2
 import numpy as np
 
-from ppocronnx.predict_system import BoxedResult
+from module.ocr.common import BoxedResult
 from enum import Enum
 
 
@@ -169,15 +169,21 @@ class BaseCor:
         # pre process
         start_time = time.time()
         image = self.pre_process(image)
+        # image = enlarge_canvas(image)
         # ocr
         result, score = self.model.ocr_single_line(image)
         if score < self.score:
             result = ""
         # after proces
         result = self.after_process(result)
-        # logger.info("ocr result score: %s%s" % (result,score))
-        logger.attr(name='%s %ss' % (self.name, float2str(time.time() - start_time)),
-                    text=f'[{result}]')
+        logger.debug("ocr result score: %s %s" % (result, score))
+        logger.debug(
+            '[%s %ss] [%s]' % (
+                self.name,
+                float2str(time.time() - start_time),
+                result,
+            )
+        )
         return result
 
     def ocr_single_line(self, image):
@@ -191,6 +197,7 @@ class BaseCor:
         start_time = time.time()
         image = self.crop(image, self.roi)
         image = self.pre_process(image)
+        # image = enlarge_canvas(image)
         # ocr
         result, score = self.model.ocr_single_line(image)
         contains_digit = any(char.isdigit() for char in result)
@@ -205,9 +212,14 @@ class BaseCor:
             result = ""
         # after proces
         result = self.after_process(result)
-        # logger.info("ocr result score: %s" % score)
-        logger.attr(name='%s %ss' % (self.name, float2str(time.time() - start_time)),
-                    text=f'[{result}]')
+        logger.debug("ocr result score: %s %s" % (result, score))
+        logger.debug(
+            '[%s %ss] [%s]' % (
+                self.name,
+                float2str(time.time() - start_time),
+                result,
+            )
+        )
         return result
 
     def detect_and_ocr(self, image, logDisplay: bool = True, **kwargs) -> list[BoxedResult]:
@@ -220,21 +232,26 @@ class BaseCor:
         start_time = time.time()
         image = self.crop(image, self.roi)
         image = self.pre_process(image)
-        image = enlarge_canvas(image)
+        # image = enlarge_canvas(image)
 
         # ocr
         boxed_results: list[BoxedResult] = self.model.detect_and_ocr(image, **kwargs)
         results = []
         # after proces
         for result in boxed_results:
-            # logger.info("ocr result score: %s" % result.score)
+            logger.debug("ocr result score: %s %s" % (result.ocr_text, result.score))
             if result.score < self.score:
                 continue
             result.ocr_text = self.after_process(result.ocr_text)
             results.append(result)
         if logDisplay:
-            logger.attr(name='%s %ss' % (self.name, float2str(time.time() - start_time)),
-                        text=str([result.ocr_text for result in results]))
+            logger.debug(
+                '[%s %ss] %s' % (
+                    self.name,
+                    float2str(time.time() - start_time),
+                    str([result.ocr_text for result in results]),
+                )
+            )
         return results
 
     def match(self, result: str, included: bool=False) -> bool:
@@ -249,7 +266,7 @@ class BaseCor:
         else:
             return self.keyword == result
 
-    def filter(self, boxed_results: list[BoxedResult], keyword: str=None) -> list or None:
+    def filter(self, boxed_results: list[BoxedResult], keyword: str=None) -> list:
         """
         使用ocr获取结果后和keyword进行匹配. 返回匹配的index list
         :param keyword: 如果不指定默认适用对象的keyword
@@ -300,19 +317,24 @@ class BaseCor:
         start_time = time.time()
         image = self.crop(image, self.roi)
         image = self.pre_process(image)
-        image = enlarge_canvas(image)
+        # image = enlarge_canvas(image)
         # ocr
         boxed_results: list[BoxedResult] = self.model.detect_and_ocr(image)
         results = ''
         # after proces
         for result in boxed_results:
-            # logger.info("ocr result score: %s" % result.score)
+            logger.debug("ocr result score: %s %s" % (result.ocr_text, result.score))
             if result.score < self.score:
                 continue
             results += result.ocr_text
         # logger.info("ocr result score: %s" % score)
-        logger.attr(name='%s %ss' % (self.name, float2str(time.time() - start_time)),
-                    text=f'[{results}]')
+        logger.debug(
+            '[%s %ss] [%s]' % (
+                self.name,
+                float2str(time.time() - start_time),
+                results,
+            )
+        )
         return results
 
 
