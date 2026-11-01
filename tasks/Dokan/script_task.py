@@ -12,6 +12,7 @@ from future.backports.datetime import datetime
 
 from module.base.timer import Timer
 from module.exception import TaskEnd
+from module.image.rpc import get_image_client
 from module.logger import logger
 from tasks.Component.GeneralBattle.config_general_battle import GeneralBattleConfig
 from tasks.Component.GeneralBattle.general_battle import GeneralBattle, ExitMatcher, BattleBehaviorScope, BattleContext, \
@@ -44,6 +45,15 @@ class ScriptTask(GameUi, SwitchSoul, GeneralBattle, DokanAssets):
     first_master_killed: bool = False  # 一阵是否被击败(只有识别到二阵这个标识才会设置为true)
     found_dokan_cnt: int = 0  # 已经寻找道馆的次数
     conf: Dokan = None
+    # 福利寮寮徽(「鑫」)匹配分数 >= 该值时, 直接判定为福利寮
+    WELFARE_BADGE_HIGH_SCORE: float = 0.78
+    # 分数落在 [LOW, HIGH) 区间时, 仍按福利寮处理(仅打印告警),
+    # 用于容忍不同截图/渲染带来的分数波动, 避免漏判
+    WELFARE_BADGE_LOW_SCORE: float = 0.62
+    # 侧边栏每行的结构固定, 寮徽搜索区域 = 赏金图标 roi + 该偏移 (dx, dy, dw, dh)
+    WELFARE_BADGE_ROI_OFFSET: tuple = (-16, -82, 110, 88)
+    # 寮徽上汉字(「鑫」)的 OCR 区域 = 赏金图标 roi + 该偏移 (dx, dy, dw, dh)
+    WELFARE_BADGE_CHAR_ROI_OFFSET: tuple = (12, -58, 56, 54)
 
     def _register_custom_pages(self) -> None:
         page_battle_result = self.navigator.resolve_page(pages.page_battle_result)
@@ -276,6 +286,8 @@ class ScriptTask(GameUi, SwitchSoul, GeneralBattle, DokanAssets):
         bool: 是否找到了符合条件的道馆并进行挑战。
         """
         self.found_dokan_cnt += 1
+        # 是否只进攻福利寮(寮徽为「鑫」的道馆)
+        welfare_only = self.config.dokan.dokan_config.attack_welfare_dokan
         # 刷新按钮点击次数
         num_fresh = 0
         # 备份一些重要的ROI区域，以便在循环中恢复
@@ -307,10 +319,14 @@ class ScriptTask(GameUi, SwitchSoul, GeneralBattle, DokanAssets):
             for idx, item in enumerate(bounty_list):
                 self.device.click_record_clear()
                 logger.info(f"------start no.{idx} =={item}-----------")
+                self.screenshot()
+                # 只进攻福利寮: 先识别寮徽, 非福利寮直接跳过(不点屏、不识别赏金, 也不读防守人数)
+                if welfare_only and not self.is_welfare_dokan(item):
+                    logger.info(f"skip non-welfare dokan, item={item}")
+                    continue
                 # 点击使挑战按钮消失的区域(C_DOKAN_CANCEL_SELECT_DOKAN), 点击可能点击到其他寮,
                 # 因此需要在此处多点几次,直到挑战按钮消失,
                 # 又因为出现挑战按钮动画时长较长,因此需要耗时
-                self.screenshot()
                 while self.appear(self.I_CENTER_CHALLENGE):
                     self.click(self.C_DOKAN_CANCEL_SELECT_DOKAN, interval=1.5)
                     self.wait_animate_stable(self.C_DOKAN_CANCEL_SELECT_DOKAN_CHECK_ANIMATE, interval=0.5, timeout=1.5)
@@ -352,17 +368,16 @@ class ScriptTask(GameUi, SwitchSoul, GeneralBattle, DokanAssets):
                     idx_selected = idx
                 # 大于系数 或者 系数过小(文字识别错误导致)
                 if item_score > score or item_score < 1.5:
-                    logger.info("click to making challenge disappear")
+                    logger.info(f"skip dokan: score {item_score:.2f} out of range(上限{score})")
                     continue
                 if p_num < self.config.dokan.dokan_config.min_people_num:
-                    logger.info("people num too small")
+                    logger.info(f"skip dokan: people num {p_num:.0f} < {self.config.dokan.dokan_config.min_people_num}")
                     continue
                 if bounty < self.config.dokan.dokan_config.min_bounty:
-                    logger.info("bounty too small")
+                    logger.info(f"skip dokan: bounty {bounty:.0f} < {self.config.dokan.dokan_config.min_bounty}")
                     continue
-                # 馆主不是修习等级的
-                if not self.appear(self.I_CENTER_GUANZHU_XIUXI):
-                    continue
+                # NOTE: 不再校验「馆主·修习」等级。福利寮的馆主常是「博」等更高等级,
+                #       按等级过滤会把符合系数/人数/赏金的目标白白跳过; 能否打过交给战斗流程。
                 logger.info(f"find_dokan: bounty:{bounty},people_num:{p_num},score:{bounty / p_num}")
                 return True
             # 在所有列表中都没有符合的,且忽略系数限制,那么就选择最低分数的那个,点击显示挑战按钮
@@ -398,6 +413,10 @@ class ScriptTask(GameUi, SwitchSoul, GeneralBattle, DokanAssets):
             logger.info("Refresh Done")
             num_fresh += 1
         # 刷新次数用完,仍未找到符合条件的道馆,选择当前列表(约4个)中系数最低的
+        if welfare_only:
+            # 只进攻福利寮时不做"随机选一个"的兜底, 宁可本次不进攻
+            logger.warning("no welfare dokan found, skip this attack")
+            return False
         if find_challengeable(ignore_score=True):
             logger.warning("can't find challengeable dokan,select random one")
             self.ui_click(self.I_CENTER_CHALLENGE, self.I_CHALLENGE_ENSURE, interval=1)
@@ -454,6 +473,80 @@ class ScriptTask(GameUi, SwitchSoul, GeneralBattle, DokanAssets):
                     item.roi_front[3] - item.roi_back[3]))
             item.roi_back = position_offset(item.roi_back, offset)
         return res_list
+
+    def is_welfare_dokan(self, bounty_roi: tuple) -> bool:
+        """
+        判断道馆列表(右侧侧边栏)中的某一行是否为福利寮
+
+        侧边栏每一行的结构固定: 寮徽位于赏金图标的正上方, 因此直接由赏金图标的位置
+        推算寮徽的搜索区域, 不需要额外的点击或滑动, 也不会受列表滚动影响.
+
+        识别顺序(先便宜后昂贵, 且逐级容错):
+        1. 模板匹配: "左半部"与"底部"两个模板分别匹配(寮徽右上角会被等级标签遮挡,
+           分开匹配可以让任意一块被遮挡时另一块仍然命中), 再加一次灰度匹配(容忍寮徽
+           底色/色调差异), 三者取最高分; 分数 >= HIGH 直接判定为福利寮, 不再做 OCR.
+        2. OCR 兜底: 直接识别寮徽上的汉字是否为「鑫」, 用于寮徽底色与模板差异较大、
+           模板分数掉出阈值的情况.
+        3. 低分容错: 模板分数落在 [LOW, HIGH) 且 OCR 也没读出来时, 仍按福利寮处理并
+           打印告警, 宁可错杀不漏判.
+
+        @param bounty_roi: 该行赏金图标的 roi, 即 find_all_element 的结果 (x, y, w, h)
+        @return: 是否为福利寮
+        """
+        roi = position_offset(bounty_roi, self.WELFARE_BADGE_ROI_OFFSET)
+        grayscale_roi = [int(v) for v in roi]
+        rules = []
+        for badge in (self.I_RYOU_DOKAN_WELFARE_BADGE, self.I_RYOU_DOKAN_WELFARE_BADGE_BOTTOM):
+            payload = badge.to_service_payload()
+            payload['roi_back'] = [int(v) for v in roi]
+            rules.append(payload)
+        # 灰度版本: 只保留寮徽主体, 用于寮徽底色(色调)不同的情况
+        gray_payload = self.I_RYOU_DOKAN_WELFARE_BADGE.to_service_payload()
+        gray_payload['roi_back'] = grayscale_roi
+        gray_payload['grayscale'] = True
+        rules.append(gray_payload)
+        try:
+            results = get_image_client().match_many(rules_data=rules,
+                                                    image=self.device.image,
+                                                    frame_id=self.device.image_frame_id)
+        except Exception as e:
+            logger.warning(f"match welfare dokan badge failed: {e}")
+            return False
+        scores = [round(float(result.get('score') or 0), 3) for result in results]
+        best_score = max(scores) if scores else 0
+        if best_score >= self.WELFARE_BADGE_HIGH_SCORE:
+            logger.info(f"welfare dokan badge matched by template, scores={scores}")
+            return True
+        # 模板分数不够, 用 OCR 直接读寮徽上的汉字
+        if self.ocr_welfare_badge_char(bounty_roi):
+            logger.info(f"welfare dokan badge matched by ocr, template scores={scores}")
+            return True
+        if best_score >= self.WELFARE_BADGE_LOW_SCORE:
+            logger.warning(f"welfare dokan badge low template scores={scores} and ocr miss, "
+                           f"treated as welfare dokan, roi={list(roi)}")
+            return True
+        logger.info(f"not a welfare dokan badge, scores={scores}")
+        return False
+
+    def ocr_welfare_badge_char(self, bounty_roi: tuple) -> bool:
+        """
+        识别侧边栏某一行寮徽上的汉字, 判断是否为福利寮的「鑫」
+
+        与模板匹配相互独立: 寮徽底色/配色不同时模板分数会掉, 但汉字本身不变.
+        @param bounty_roi: 该行赏金图标的 roi (x, y, w, h)
+        """
+        roi = position_offset(bounty_roi, self.WELFARE_BADGE_CHAR_ROI_OFFSET)
+        self.O_DOKAN_WELFARE_BADGE_CHAR.roi = [int(v) for v in roi]
+        try:
+            text = self.O_DOKAN_WELFARE_BADGE_CHAR.ocr(self.device.image) or ''
+        except Exception as e:
+            logger.warning(f"ocr welfare dokan badge failed: {e}")
+            return False
+        keyword = self.O_DOKAN_WELFARE_BADGE_CHAR.keyword or '鑫'
+        if keyword and keyword in text:
+            logger.info(f"welfare dokan badge char ocr text=[{text}]")
+            return True
+        return False
 
     def start_cheering(self):
         if not self.conf.dokan_config.dokan_auto_cheering_while_cd:

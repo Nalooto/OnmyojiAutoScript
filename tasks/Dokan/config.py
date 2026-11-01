@@ -136,6 +136,8 @@ class DokanConfig(BaseModel):
     min_people_num: int = Field(default=-1, description='min_people_num_help')
     # 最少赏金设置
     min_bounty: int = Field(default=0, description='min_bounty_help')
+    # 只进攻福利寮: 查找道馆时只挑选寮徽为"鑫"字样的福利寮, 找不到则本次不进攻
+    attack_welfare_dokan: bool = Field(default=False, description='attack_welfare_dokan_help')
     # 单次查找道馆时,最大刷新次数.超过此次数后,若还未找到符合要求的,会随机选择一个道馆
     find_dokan_refresh_count: int = Field(default=7, description='find_dokan_refresh_count_help')
 

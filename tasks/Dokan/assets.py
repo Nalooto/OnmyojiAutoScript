@@ -160,6 +160,10 @@ class DokanAssets:
 	I_RYOU_DOKAN_CHEERING = RuleImage(roi_front=(65,601,71,33), roi_back=(44,568,112,100), threshold=0.8, method="Template matching", file="./tasks/Dokan/res/res_ryou_dokan_cheering.png")
 	# 助威灰色不可点击 
 	I_RYOU_DOKAN_CHEERING_GRAY = RuleImage(roi_front=(65,601,71,33), roi_back=(44,568,112,100), threshold=0.8, method="Template matching", file="./tasks/Dokan/res/res_ryou_dokan_cheering_gray.png")
+	# 查找道馆时,右侧列表中的福利寮寮徽(「鑫」字)左半部,用于筛选福利寮 
+	I_RYOU_DOKAN_WELFARE_BADGE = RuleImage(roi_front=(1137,472,39,54), roi_back=(1112,448,110,88), threshold=0.68, method="Template matching", file="./tasks/Dokan/res/res_ryou_dokan_welfare_badge.png")
+	# 查找道馆时,右侧列表中的福利寮寮徽(「鑫」字)底部,与左半部互为容错 
+	I_RYOU_DOKAN_WELFARE_BADGE_BOTTOM = RuleImage(roi_front=(1140,498,58,28), roi_back=(1112,448,110,88), threshold=0.68, method="Template matching", file="./tasks/Dokan/res/res_ryou_dokan_welfare_badge_bottom.png")
 
 
 	# List Rule Assets
@@ -183,6 +187,8 @@ class DokanAssets:
 	O_DOKAN_CENTER_PEOPLE_NUMBER = RuleOcr(roi=(0,0,0,0), area=(0,0,0,0), mode="Full", method="Default", keyword="", name="dokan_center_people_number")
 	# 道馆失败CD 
 	O_DOKEN_FAIL_CD = RuleOcr(roi=(1066,499,193,31), area=(1061,490,207,47), mode="Full", method="Default", keyword="", name="doken_fail_cd")
+	# 福利寮寮徽上的「鑫」字,查找道馆时用于OCR兜底识别(寮徽底色不同导致模板匹配失效时) 
+	O_DOKAN_WELFARE_BADGE_CHAR = RuleOcr(roi=(1136,472,56,54), area=(1136,472,56,54), mode="Single", method="Default", keyword="鑫", name="dokan_welfare_badge_char")
 
 
 	# Swipe Rule Assets

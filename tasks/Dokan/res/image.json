@@ -538,5 +538,23 @@
     "method": "Template matching",
     "threshold": 0.8,
     "description": "助威灰色不可点击"
+  },
+  {
+    "itemName": "ryou_dokan_welfare_badge",
+    "imageName": "res_ryou_dokan_welfare_badge.png",
+    "roiFront": "1137,472,39,54",
+    "roiBack": "1112,448,110,88",
+    "method": "Template matching",
+    "threshold": 0.68,
+    "description": "查找道馆时,右侧列表中的福利寮寮徽(「鑫」字)左半部,用于筛选福利寮"
+  },
+  {
+    "itemName": "ryou_dokan_welfare_badge_bottom",
+    "imageName": "res_ryou_dokan_welfare_badge_bottom.png",
+    "roiFront": "1140,498,58,28",
+    "roiBack": "1112,448,110,88",
+    "method": "Template matching",
+    "threshold": 0.68,
+    "description": "查找道馆时,右侧列表中的福利寮寮徽(「鑫」字)底部,与左半部互为容错"
   }
 ]

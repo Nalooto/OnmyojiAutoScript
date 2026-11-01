@@ -118,6 +118,8 @@
   "green_mark_name_help": "按照相似度识别, 失败则填写日志中匹配到的最相似文字或改名",
   "dokan_member_battle_conf": "道馆成员战斗配置",
   "dokan_owner_battle_conf": "馆主战斗配置",
+  "attack_welfare_dokan": "只进攻福利寮",
+  "attack_welfare_dokan_help": "开启后只挑选寮徽为「鑫」字的福利寮作为挑战目标：先识别寮徽(模板匹配 + OCR 识别汉字, 寮徽底色不同也能命中), 确认是福利寮后再识别赏金；道馆系数、最少人数、最少赏金等条件依旧生效；列表刷完仍未找到福利寮时不进攻普通道馆。需同时开启「尝试开启道馆」。",
   "dokan_member_switch_soul": "道馆成员切换御魂配置",
   "dokan_owner_switch_soul": "馆主切换御魂配置",
   "costume_battle_13": "登云问翠",

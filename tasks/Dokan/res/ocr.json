@@ -61,5 +61,14 @@
     "method": "Default",
     "keyword": "",
     "description": "道馆失败CD"
+  },
+  {
+    "itemName": "dokan_welfare_badge_char",
+    "roiFront": "1136,472,56,54",
+    "roiBack": "1136,472,56,54",
+    "mode": "Single",
+    "method": "Default",
+    "keyword": "鑫",
+    "description": "福利寮寮徽上的「鑫」字,查找道馆时用于OCR兜底识别(寮徽底色不同导致模板匹配失效时)"
   }
 ]
