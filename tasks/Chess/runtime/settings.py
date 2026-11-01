@@ -17,6 +17,11 @@ class ChessRuntimeSettings:
     HAND_TEMPLATE_THRESHOLD = 0.75
     HAND_DEPLOY_TEMPLATE_THRESHOLD = 0.75
     HAND_DEPLOY_CONFIRM_FRAMES = 1
+    # 上阵后的动画帧经常读不到等级文字。单帧失败不应终止整轮上阵，
+    # 允许重试后沿用本局最近一次成功读数。
+    LEVEL_READ_RETRIES = 2
+    # 离场判定会删除本局位置记录，必须连续两帧确认后才执行。
+    LINEUP_CHECK_CONFIRM_FRAMES = 2
     # Chess 运行时统一使用四档间隔。较慢的 2/3 秒轮询通过倍数表达，
     # 不再为每个功能分别维护近似数值。
     FAST_OPERATION_INTERVAL = 0.1

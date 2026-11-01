@@ -129,7 +129,11 @@ class ChessHandOperationsMixin:
         frame = (self.F_BOSS_BOARD_OCCUPANCY if self._is_boss_challenge_round()
                  else self.F_BOARD_OCCUPANCY)
         if not self.appear(frame):
-            raise GameStuckError('Chess deployment Frame anchor not found')
+            # 商店收起与战斗切换的过渡帧会让表情锚点短暂缺失。重试一帧
+            # 再判失败，避免一次漏检直接终止整局任务。
+            self.screenshot()
+            if not self.appear(frame):
+                raise GameStuckError('Chess deployment Frame anchor not found')
         x, y, w, h = frame.matched_ranges[12 + index - 1]
         return int(round(x + w / 2)), int(round(y + h / 2))
 
@@ -783,6 +787,15 @@ class ChessHandOperationsMixin:
         """Count identities from this screenshot's shared Frame scan."""
         return sum(card['name'] == name for card in self._frame_card_scan('card'))
 
+    def _lineup_hand_name_counter(self) -> Counter:
+        """按名字统计手牌中的阵容式神，用于识别刚被回收的牌。"""
+        allowed = self.get_lineup_strategy()['shikigami']
+        return Counter(
+            card['name']
+            for card in self._frame_card_scan('card')
+            if card['name'] in allowed
+        )
+
     def _lineup_hand_stars(self, name: str) -> tuple | None:
         cards = [card for card in self._frame_card_scan('card') if card['name'] == name]
         if not cards or any(card.get('star') not in (1, 2, 3) for card in cards):
@@ -1435,6 +1448,9 @@ class ChessHandOperationsMixin:
         # 模板单帧漏识别不能证明式神已经离场；若据此清除名称，会同时
         # 导致重复上阵和专属御魂失去目标。
         failed_attempts = {}
+        # 本回合被 recall 收回手牌的阵容牌：它们刚离开棋盘，若立刻重新
+        # 上阵就会和下一张召回形成“换下去又换回来”的死循环。
+        recalled_names: set[str] = set()
         for _ in range(self.HAND_DEPLOY_SAFETY_LIMIT):
             if not self._is_preparation_mode():
                 logger.debug(
@@ -1459,6 +1475,7 @@ class ChessHandOperationsMixin:
             candidate = self._find_best_shikigami_hand_card(
                 excluded_names=(
                     deployed_names
+                    | recalled_names
                     | {
                         name
                         for name, attempts in failed_attempts.items()
@@ -1484,6 +1501,7 @@ class ChessHandOperationsMixin:
             # 每次上阵前都检查系统自动上阵区域。若存在未由脚本登记的
             # 单位，先将其中一个下阵；只有系统位为空时才以动态人数
             # 判断是否还能直接上阵。
+            hand_before_recall = self._lineup_hand_name_counter()
             recalled_set = self._recall_one_system_board_card(
                 preferred_set_index=set_index,
             )
@@ -1494,6 +1512,21 @@ class ChessHandOperationsMixin:
                 # 下阵卡进入手牌后会让整排手牌重新布局。下阵前保存的
                 # candidate.position 已失效，必须基于新截图重新定位同名卡。
                 self.screenshot()
+                # 手牌差值即刚被回收的牌。它们这一回合不再参与上阵，
+                # 只留到下一回合重新评估站位，避免同一张牌来回搬运。
+                newly_recalled = {
+                    name
+                    for name, count in (
+                        self._lineup_hand_name_counter() - hand_before_recall
+                    ).items()
+                    if count > 0
+                }
+                if newly_recalled:
+                    recalled_names.update(newly_recalled)
+                    logger.info(
+                        'Chess recalled cards stay out of deployment this '
+                        f'round: {sorted(newly_recalled)}'
+                    )
                 candidate_name = candidate['name']
                 candidate = self._find_best_shikigami_hand_card(
                     excluded_names=(
@@ -1541,6 +1574,12 @@ class ChessHandOperationsMixin:
                 continue
 
             deployed.append(candidate['name'])
+            # recall 可能刚移除了别的牌，必须以当前记录为基线追加，不能
+            # 用循环外的快照整体覆盖，否则会把已下阵的牌“复活”进名单，
+            # 让下一轮人口判定提前满员。
+            deployed_names = set(
+                getattr(self, '_board_lineup_names', set())
+            )
             deployed_names.add(candidate['name'])
             self._board_lineup_names = deployed_names
             self._record_actual_lineup_position(
@@ -2165,6 +2204,10 @@ class ChessHandOperationsMixin:
         player_positions = set(
             getattr(self, '_player_deployed_positions', set())
         )
+        # 荒川金鱼占位但不可回收：把它当系统牌拖拽只会白耗三次重试。
+        goldfish_position = getattr(
+            self, '_arakawa_goldfish_current_position', None
+        )
         positions = list(self.BOARD_RECALL_POSITIONS)
         if preferred_set_index in positions:
             positions.remove(preferred_set_index)
@@ -2180,6 +2223,12 @@ class ChessHandOperationsMixin:
         self.screenshot()
         for set_index in positions:
             if set_index in player_positions:
+                continue
+            if goldfish_position is not None and int(set_index) == int(goldfish_position):
+                logger.debug(
+                    f'Skip Chess recall set {set_index}: '
+                    'occupied by Arakawa goldfish'
+                )
                 continue
             if not self._board_set_has_shikigami(set_index):
                 continue
@@ -2311,10 +2360,17 @@ class ChessHandOperationsMixin:
         player_positions = set(
             getattr(self, '_player_deployed_positions', set())
         )
+        goldfish_position = getattr(
+            self, '_arakawa_goldfish_current_position', None
+        )
         recall_positions = tuple(
             set_index
             for set_index in self.BOARD_RECALL_POSITIONS
             if set_index not in player_positions
+            and (
+                goldfish_position is None
+                or int(set_index) != int(goldfish_position)
+            )
         )
         protected_recall_positions = sorted(
             set(self.BOARD_RECALL_POSITIONS) & player_positions

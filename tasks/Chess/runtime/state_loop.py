@@ -201,7 +201,22 @@ class ChessStateLoopMixin:
         slots = self._board_frame_scan(round_no=round_no)
         if not slots or not any(slot['occupied'] for slot in slots):
             return
-        self._reconcile_preparation_lineup(slots)
+        # 删除位置记录会让后续 recall 把刚上阵的牌当成系统牌收走，因此
+        # 必须第二帧复核；复核帧读不到就本轮不判定，留到下一回合。
+        confirm_slots = None
+        for _ in range(self.LINEUP_CHECK_CONFIRM_FRAMES - 1):
+            time.sleep(self.ACTION_SETTLE_INTERVAL)
+            self.screenshot()
+            confirm_slots = self._board_frame_scan(round_no=round_no)
+            if not confirm_slots:
+                break
+        if self.LINEUP_CHECK_CONFIRM_FRAMES > 1 and not confirm_slots:
+            logger.debug(
+                'Chess preparation lineup check skipped: '
+                'confirm frame unavailable'
+            )
+            return
+        self._reconcile_preparation_lineup(slots, confirm_slots)
         checked.add(round_no)
 
     def run_one_round(self, round_no: int) -> int | None:

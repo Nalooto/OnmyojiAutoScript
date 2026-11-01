@@ -471,8 +471,17 @@ class ChessRoundStateMixin:
         slots = self._board_frame_scan()
         return bool(slots and not slots[index - 1]['occupied'])
 
-    def _reconcile_preparation_lineup(self, slots) -> list[str]:
-        """复用关店后已确认有人的棋盘结果，清理离场式神记录。"""
+    def _reconcile_preparation_lineup(
+        self,
+        slots,
+        confirm_slots=None,
+    ) -> list[str]:
+        """复用关店后已确认有人的棋盘结果，清理离场式神记录。
+
+        传 ``confirm_slots`` 时任意一帧显示占位即保留记录：删除位置记录
+        会让后续 recall 把自己刚上阵的牌当成系统牌收走，因此宁可漏判
+        一次离场，也不能被单帧动画误删。
+        """
         deployed_names = set(
             getattr(self, '_board_lineup_names', set())
         )
@@ -492,9 +501,24 @@ class ChessRoundStateMixin:
                 continue
             if slots[int(set_index) - 1]['occupied']:
                 continue
+            if (
+                confirm_slots is not None
+                and confirm_slots[int(set_index) - 1]['occupied']
+            ):
+                continue
             deployed_names.discard(name)
             actual_positions.pop(name, None)
-            player_positions.discard(int(set_index))
+            # 若同一格还有另一条记录指向它，说明位置记录存在冲突；这时
+            # 解除保护会让 recall 把自己刚上阵的牌当系统牌收走。
+            still_claimed = any(
+                actual_positions.get(
+                    other,
+                    self.shikigami_deploy_positions.get(other),
+                ) == int(set_index)
+                for other in deployed_names
+            )
+            if not still_claimed:
+                player_positions.discard(int(set_index))
             removed.append(name)
             logger.warning(
                 'Chess preparation shikigami missing; '
@@ -541,11 +565,28 @@ class ChessRoundStateMixin:
         """以本局已确认上阵名单统计人口；金鱼等特殊单位不计人口。"""
         level = self._read_level()
         if level is None:
+            # 上阵后的动画帧会遮挡等级文字。单帧空 OCR 不应该结束整轮
+            # 上阵流程：先重试几帧，再沿用本局最近一次成功读数。等级只
+            # 会随回合上升，沿用旧值最多偏保守，不会多上牌。
+            for _ in range(self.LEVEL_READ_RETRIES):
+                self.screenshot()
+                level = self._read_level()
+                if level is not None:
+                    break
+        if level is None:
+            level = getattr(self, '_last_known_level', None)
+            if level is not None:
+                logger.warning(
+                    'Chess lineup capacity uses last known level after '
+                    f'retries: level={level}'
+                )
+        if level is None:
             logger.warning(
                 'Chess lineup capacity unavailable: '
                 f'level={level}'
             )
             return None
+        self._last_known_level = int(level)
 
         deployed_names = {
             name
