@@ -25,16 +25,15 @@ class ChessRuntimeSettings:
     SLOW_POLL_INTERVAL = 1.0
     ACTION_ICON_WAIT_TIMEOUT = 3.0
     ACTION_ICON_MAX_ATTEMPTS = 3
-    # 阶数徽章会被上阵/卖卡的落点动画遮住几百毫秒，OCR 需要重拍再判。
-    LEVEL_OCR_RETRY_DELAYS = (0.3, 0.6)
     # 首领挑战会大幅改变棋盘显示位置，固定站位的勾玉检测框不可用。
     BOSS_CHALLENGE_ROUNDS = frozenset({9, 15, 21, 27, 33})
     HAND_DEPLOY_SAFETY_LIMIT = 20
     HAND_CLEANUP_SAFETY_LIMIT = 30
     HAND_CLEANUP_CLEAN_CONFIRM_FRAMES = 3
-    # 系统自动上阵优先占用棋盘右侧 11、12、9、10 号位。百鬼结束后
-    # 只需要依次回收这些候选格；若 9 号位由脚本亲自部署，则保留该格。
-    BOARD_RECALL_POSITIONS = (11, 12, 9, 10)
+    # 系统自动上阵优先占用棋盘右侧 6、12、5、11 号位。百鬼结束后
+    # 只需要依次回收这些候选格；若 5 号位由脚本亲自部署，则保留该格。
+    BOARD_RECALL_POSITIONS = (12, 6, 11, 5)
+    GOLDFISH_INSPECT_TIMEOUT = 1.0
     # c_card_1/2/3.png 专用于检测棋盘式神头顶的三种勾玉颜色。
     BOARD_OCCUPANCY_TEMPLATE_THRESHOLD = 0.68
     ROUND_CONFIRM_FRAMES = 2
@@ -66,7 +65,7 @@ class ChessRuntimeSettings:
     SOUL_EQUIP_SAFETY_LIMIT = 20
     DISCOVER_SOUL_SAFETY_LIMIT = 10
     DISCOVER_SOUL_UI_TIMEOUT = 8.0
-    SOUL_ODD_SET_Y_OFFSET = -5
+    SOUL_FRONT_ROW_Y_OFFSET = -5
     SOUL_TEMPLATE_THRESHOLD = 0.60
     SOUL_TEMPLATE_SCALES = (0.85, 0.90, 0.95, 1.00, 1.05, 1.10, 1.15, 1.20)
     SOUL_DISPLAY_NAMES = {

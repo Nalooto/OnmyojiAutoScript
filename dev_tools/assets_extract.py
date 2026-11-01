@@ -66,12 +66,17 @@ class ImageExtractor:
         :return:
         """
         description: str = f'\t# {item["description"]} \n'
+        # profile 为 RuleImage 的匹配档位；Default 是默认行为，无需显式写出
+        profile: str = str(item.get("profile", "High"))
+        profile_arg: str = f'profile="{profile}", ' if profile in ("High", "More") else ''
+        image_file: str = f'./{self.image_path}/{item["imageName"]}' if item.get('imageName') else ''
         name: str = f'\tI_{name_transform(item["itemName"])} = RuleImage(' \
                     f'roi_front=({item["roiFront"]}), ' \
                     f'roi_back=({item["roiBack"]}), ' \
                     f'threshold={item["threshold"]}, ' \
                     f'method="{item["method"]}", ' \
-                    f'file="./{self.image_path}/{item["imageName"]}")\n'
+                    f'{profile_arg}' \
+                    f'file="{image_file}")\n'
         return description + name
 
 

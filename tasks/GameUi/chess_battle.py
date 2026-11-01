@@ -202,11 +202,11 @@ class ChessBattleNavigationMixin:
                 continue
 
             # 与通用战斗一致：先确认退出，再检查结算，最后尝试退出入口。
-            if self.appear_then_click(GlobalGameAssets.I_UI_CONFIRM, interval=0.8):
+            if self.appear_then_click(GeneralBattleAssets.I_EXIT_ENSURE, interval=0.8):
                 time.sleep(self.CHESS_EXIT_SCREENSHOT_INTERVAL)
                 continue
             if self.chess_result_page_visible():
-                self.ui_click_until_disappear(GlobalGameAssets.I_UI_CONFIRM, interval=0.8)
+                self.ui_click_until_disappear(GeneralBattleAssets.I_EXIT_ENSURE, interval=0.8)
                 logger.debug('Chess_Exit: result page reached')
                 if return_to_lobby:
                     return self.return_to_chess_lobby()
