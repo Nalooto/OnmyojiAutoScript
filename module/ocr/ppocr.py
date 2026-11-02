@@ -1,7 +1,26 @@
+import cv2
 import numpy as np
 from paddleocr import PaddleOCR
 
 from module.ocr.common import BoxedResult, OcrLogger
+
+# PaddleOCR 3.x 的检测阶段会先把输入缩放到 text_det_limit_side_len（默认 736）再送进 det，
+# 裁得很小的数字区域（例如 23x24 的勾玉数字）在这种剧烈上采样后会把相邻两个字粘成一团，
+# 检测框只框住一个字符，rec 结果就只剩 "2"（21 被读成 2）。这类裁剪在推理前先放大到
+# 最小边 48，检测器才能正常切字。
+_MIN_INFER_SIDE = 32
+_TARGET_INFER_SIDE = 48
+
+
+def upscale_tiny(image: np.ndarray) -> np.ndarray:
+    """把过小的单行裁剪放大到可正常检测的尺寸，尺寸够大时原样返回。"""
+    height, width = image.shape[:2]
+    min_side = min(height, width)
+    if min_side <= 0 or min_side >= _MIN_INFER_SIDE:
+        return image
+    scale = _TARGET_INFER_SIDE / min_side
+    new_size = (max(1, int(round(width * scale))), max(1, int(round(height * scale))))
+    return cv2.resize(image, new_size, interpolation=cv2.INTER_CUBIC)
 
 
 class TextSystem:
@@ -55,6 +74,7 @@ class TextSystem:
         """Recognize a single line of text from a cropped image.
         若检测到多个文字块，按从左到右顺序拼接。
         """
+        img = upscale_tiny(img)
         result = list(self._ocr.predict(img, use_textline_orientation=self._use_angle_cls))
         if not result or not result[0].get('rec_texts'):
             OcrLogger.save(img, "ocr_single_line", "", 0.0, extra="no_text_detected")

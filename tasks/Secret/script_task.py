@@ -1,13 +1,13 @@
 # This Python file uses the following encoding: utf-8
 # @author runhey
 # github https://github.com/runhey
+import copy
 import time
 from cached_property import cached_property
 from datetime import datetime
 
 from module.exception import TaskEnd
 from module.logger import logger
-from module.atom.ocr import RuleOcr
 
 from tasks.GameUi.game_ui import GameUi
 from tasks.GameUi.page import page_main, page_secret_zones, page_shikigami_records, page_battle_result, any_of
@@ -149,24 +149,34 @@ class ScriptTask(GameUi, GeneralBattle, SwitchSoul, SecretAssets):
         :return: 如果找得到返回层数，找不到返回None
         """
 
-        def confirm_layer(ocr_target: RuleOcr, roi=None) -> int or None:
+        def read_jade(text_pos, pad: int) -> int:
+            """
+            通过「未通关」的坐标反推勾玉数字的区域并识别，勾玉数量 = 层数 * 7
+            :param text_pos: 检测到的未通关区域
+            :param pad: 勾玉区域额外放宽的像素，个别数字被读错时用来重试
+            """
+            jade = copy.copy(self.O_SE_JADE)
+            jade.roi = [
+                int(text_pos[0]) - 118 - pad,
+                int(text_pos[1]) + 37 - pad,
+                self.O_SE_JADE.roi[2] + pad * 2,
+                self.O_SE_JADE.roi[3] + pad * 2,
+            ]
+            return jade.ocr(self.device.image)
+
+        def confirm_layer(text_pos) -> int or None:
             """
             检查层数， 启用函数check_layer
-            :param ocr_target:
-            :param roi:
+            :param text_pos: 检测到的未通关区域
             :return:
             """
-            ocr_target.roi[0] = int(roi[0]) - 118
-            ocr_target.roi[1] = int(roi[1]) + 37
-            # print(f'检测到的未通过ROI: {roi}')
-            # print(f'检测到的勾玉数量ROI: {ocr_target.roi}')
-            jade_num = ocr_target.ocr(self.device.image)
-            if isinstance(jade_num, str):
-                logger.warning(f'OCR failed, try again {jade_num}')
-                return None
-            elif not isinstance(jade_num, int):
-                logger.warning(f'OCR failed, try again {jade_num}')
-                return None
+            jade_num = read_jade(text_pos, 0)
+            if not 7 <= jade_num <= 70:
+                # 勾玉区域是按未通关坐标硬推的，裁得很紧，21 这类两位数偶尔只被读出一位
+                retry = read_jade(text_pos, 6)
+                if 7 <= retry <= 70:
+                    logger.info(f'Jade number {jade_num} retry with wider roi: {retry}')
+                    jade_num = retry
             if jade_num < 7:
                 # 第一个的时候可能是没有检测到
                 gold_number = self.O_SE_GOLD.ocr(self.device.image)
@@ -178,12 +188,7 @@ class ScriptTask(GameUi, GeneralBattle, SwitchSoul, SecretAssets):
                 logger.warning(f'OCR failed, try again {jade_num}')
                 return None
             # 勾玉数量 = 层数 * 7
-            try:
-                lr = jade_num // 7
-                return lr
-            except TypeError:
-                logger.warning(f'OCR failed, try again {jade_num}')
-                return None
+            return jade_num // 7
 
         if screenshot:
             self.screenshot()
@@ -192,7 +197,7 @@ class ScriptTask(GameUi, GeneralBattle, SwitchSoul, SecretAssets):
         text_pos = self.O_SE_NO_PASS.ocr(self.device.image)
         if text_pos != (0, 0, 0, 0):
             # 如果能找得到 未通关 ，那可以挑战
-            layer = confirm_layer(self.O_SE_JADE, text_pos)
+            layer = confirm_layer(text_pos)
             if layer:
                 self.C_SE_CLICK_LAYER.roi_front = text_pos
                 self.click(self.C_SE_CLICK_LAYER, interval=1)
@@ -205,7 +210,7 @@ class ScriptTask(GameUi, GeneralBattle, SwitchSoul, SecretAssets):
             last_text_pos = self.O_SE_NO_PASS_LAST.ocr(self.device.image)
             if last_text_pos != (0, 0, 0, 0):
                 # 如果是后面找得到
-                layer = confirm_layer(self.O_SE_JADE, last_text_pos)
+                layer = confirm_layer(last_text_pos)
 
                 # 有个bug 十层的发现不了
                 if not layer and last_text_pos[1] > 520:
