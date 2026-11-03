@@ -73,13 +73,17 @@ class ReplaceShikigami(BaseTask, ReplaceShikigamiAssets):
                 self.appear_then_click(self.I_RS_LEVEL_MAX, interval=0.5)
         logger.info('Unset all shikigami max lv')
 
-    def set_shikigami(self, shikigami_order: int = 7, stop_image: RuleImage = None):
+    def set_shikigami(self, shikigami_order: int = 7, stop_image: RuleImage = None,
+                      single_shot: bool = False) -> bool:
         """
         要求在式神育成的界面
         选择式神 1-7
         :param stop_image:  结束的图片，如果不出现就结束
         :param shikigami_order:
-        :return:
+        :param single_shot: 单次寄养模式（好友结界蹭卡）。确认按钮点击成功一次即视为寄养完成并退出。
+                            好友结界页传入的 stop_image 是右上角常驻按钮，寄养成功后不会消失，
+                            若只依赖它退出会一直空点到 GameTooManyClickError。
+        :return: True 正常结束；False 目标坑位连续点击无响应，判定不可用
         """
         # 选择式神
         _click_match = {1: self.C_SHIKIGAMI_LEFT_1,
@@ -91,9 +95,24 @@ class ReplaceShikigami(BaseTask, ReplaceShikigamiAssets):
                         7: self.C_SHIKIGAMI_LEFT_7}
         click_match = _click_match[shikigami_order]
         TIMEOUT_SEC = 120          # 超时时长（秒）
+        MAX_INEFFECTIVE_CLICK = 5  # 同一坑位连续点击无响应的次数上限
         start_time = time.time()   # 记录起始时间
         click_interval_timer = Timer(1.5).start()  # 点击选择式神间隔
         clicked = False
+        ineffective_click = 0      # 连续点击后仍没出现确认按钮的次数
+
+        def _bump_ineffective() -> bool:
+            """累计一次无效点击，返回是否已达到上限。"""
+            nonlocal ineffective_click
+            ineffective_click += 1
+            if ineffective_click >= MAX_INEFFECTIVE_CLICK:
+                logger.warning(
+                    f'Click {click_match.name} {ineffective_click} times without response, '
+                    f'give up this slot'
+                )
+                return True
+            return False
+
         while 1:
             # ——1. 先做超时检查——
             if time.time() - start_time > TIMEOUT_SEC:
@@ -105,20 +124,32 @@ class ReplaceShikigami(BaseTask, ReplaceShikigamiAssets):
             self.screenshot()
             if self.appear_then_click(self.I_U_CONFIRM_SMALL, interval=0.5):
                 clicked = False  # 点击了确认, 恢复选式神的操作
+                ineffective_click = 0  # 出现确认按钮说明坑位可点，重置无效计数
+                if single_shot:
+                    # 好友结界蹭卡只需成功放上式神一次，确认后界面已进入寄养倒计时，
+                    # 继续循环只会反复点击已被占用的坑位
+                    logger.info('Shikigami utilized, leave loop')
+                    time.sleep(0.8)  # 等待寄养生效动画结束，避免上层立刻跳转
+                    break
                 continue
             if not self.appear(stop_image):
                 break
             # 与下方点击第7个式神操作互斥, 防止确认按钮还没有出现被下方取消掉
             if not clicked and self.click(click_match, interval=1.5):
                 clicked = True
+                if _bump_ineffective():
+                    return False
                 continue
             if not clicked and self.click(_click_match[6], interval=4.5):
                 # 有的时候第七个格子被占用到寄养上去了
                 # 导致一直无法选上
                 clicked = True
+                if _bump_ineffective():
+                    return False
                 continue
             time.sleep(0.2)
         logger.info('Set shikigami: %d' % shikigami_order)
+        return True
 
     def detect_no_shikigami(self) -> bool:
         self.screenshot()
