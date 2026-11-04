@@ -23,6 +23,7 @@ from dev_tools.assets_test import detect_image_detail, detect_ocr_detail
 from module.config.atomicwrites import atomic_write
 from module.logger import logger
 from module.server.config_manager import ConfigManager
+from module.server.annotator_dir_labels import build_dir_labels
 from module.server.annotator_rule_schema import (
     default_list_meta,
     field_default,
@@ -1031,6 +1032,8 @@ class AnnotatorManager:
         return {
             "base_dir": base_rel,
             "directories": directories,
+            # 目录名的中文显示名，只用于界面展示，选中/保存仍然用真实目录名
+            "dir_labels": build_dir_labels(directories, base_rel),
             "json_files": json_files,
         }
 

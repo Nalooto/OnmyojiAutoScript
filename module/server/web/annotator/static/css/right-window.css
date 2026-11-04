@@ -33,7 +33,8 @@
 
 .breadcrumb-select {
   min-width: 130px;
-  max-width: 230px;
+  /* 目录名以「中文名 (原名)」双写展示，留宽一点避免被截断 */
+  max-width: 300px;
   height: 30px;
   padding: 4px 8px;
 }

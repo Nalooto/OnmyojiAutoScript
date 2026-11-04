@@ -26,6 +26,20 @@ from module.atom.list import RuleList
 IMPORT_EXP = IMPORT_EXP.strip().split('MODULE_FOLDER') + ['']
 
 
+def profile_argument(item: dict, default: str) -> str:
+    """
+    生成 profile= 关键字参数。
+    profile 与所在类型的默认值相同时不写出，避免生成的 assets.py 里堆满无意义的默认字段。
+    :param item: 素材条目
+    :param default: 该规则类型的默认 profile（RuleImage/RuleFrame 为 High，RuleClick 为 Default）
+    :return: 形如 'profile="More", ' 的片段，或空字符串
+    """
+    profile = str(item.get("profile") or default)
+    if profile == default:
+        return ''
+    return f'profile="{profile}", '
+
+
 def name_transform(name: str) -> str:
     """
     转换名称, 把小写的转化为大写的, 带有数字的不变，有下划线继续有下划线,
@@ -66,9 +80,8 @@ class ImageExtractor:
         :return:
         """
         description: str = f'\t# {item["description"]} \n'
-        # profile 为 RuleImage 的匹配档位；Default 是默认行为，无需显式写出
-        profile: str = str(item.get("profile", "High"))
-        profile_arg: str = f'profile="{profile}", ' if profile in ("High", "More") else ''
+        # profile 为 RuleImage 的匹配档位；High 是默认行为，无需显式写出
+        profile_arg: str = profile_argument(item, "High")
         image_file: str = f'./{self.image_path}/{item["imageName"]}' if item.get('imageName') else ''
         name: str = f'\tI_{name_transform(item["itemName"])} = RuleImage(' \
                     f'roi_front=({item["roiFront"]}), ' \
@@ -113,9 +126,12 @@ class FrameExtractor(ImageExtractor):
             roi_range=[parse(r) for r in ranges],
             roi_back=parse(item['roiBack']),
             threshold=item['threshold'],
-            method=item['method'],
-            profile=item.get('profile', 'High'),
-            badgefile=[f"./{self.image_path}/{b['imageName']}" for b in badges])
+            method=item['method'])
+        # profile 为 RuleFrame 的匹配档位；High 是默认行为，无需显式写出
+        profile = str(item.get('profile') or 'High')
+        if profile != 'High':
+            arguments['profile'] = profile
+        arguments['badgefile'] = [f"./{self.image_path}/{b['imageName']}" for b in badges]
         if item.get('badgeGrayscale', False):
             arguments['badge_grayscale'] = True
 
@@ -147,9 +163,8 @@ class ClickExtractor:
         :return:
         """
         description: str = f'\t# {item["description"]} \n'
-        # profile 为 RuleClick 的可选匹配档位；Default 是默认行为，无需显式写出
-        profile: str = str(item.get("profile", "Default"))
-        profile_arg: str = f'profile="{profile}", ' if profile in ("High", "More") else ''
+        # profile 为 RuleClick 的匹配档位；Default 是默认行为，无需显式写出
+        profile_arg: str = profile_argument(item, "Default")
         name: str = f'\tC_{name_transform(item["itemName"])} = RuleClick(' \
                     f'roi_front=({item["roiFront"]}), ' \
                     f'roi_back=({item["roiBack"]}), ' \

@@ -1939,12 +1939,19 @@
     el.deleteJsonBtn.classList.toggle("hidden", !canDelete);
   }
 
-  function createBreadcrumbSelect(values, selected, placeholder) {
+  function createBreadcrumbSelect(values, selected, placeholder, labels) {
     const select = document.createElement("select");
     select.className = "breadcrumb-select";
     createOption(select, "", placeholder);
     for (const name of values) {
-      createOption(select, name, name);
+      // 目录名做「中文名 (原名)」双写，既汉化又保留可追溯的原始目录名
+      const label = labels && labels[name] ? labels[name] : "";
+      const text = label && label !== name ? `${label} (${name})` : name;
+      createOption(select, name, text);
+      const option = select.lastElementChild;
+      if (option && text !== name) {
+        option.title = name;
+      }
     }
     if (selected && values.includes(selected)) {
       select.value = selected;
@@ -1986,7 +1993,7 @@
           el.dirSelectors.appendChild(sep);
         }
 
-        const dirSelect = createBreadcrumbSelect(dirs, selectedDir, "选择目录");
+        const dirSelect = createBreadcrumbSelect(dirs, selectedDir, "选择目录", data.dir_labels);
         dirSelect.dataset.depth = String(depth);
         dirSelect.addEventListener(
           "change",
