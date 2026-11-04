@@ -134,7 +134,7 @@ class CostumeAssets:
 	# 召唤屋 
 	I_MAIN_GOTO_SUMMON_17 = RuleImage(roi_front=(960,204,67,73), roi_back=(894,151,203,144), threshold=0.55, method="Template matching", file="./tasks/Component/Costume/main17/main17_main_goto_summon_17.png")
 	# 町中 
-	I_MAIN_GOTO_TOWN_17 = RuleImage(roi_front=(1010,342,28,43), roi_back=(936,292,179,150), threshold=0.8, method="Template matching", file="./tasks/Component/Costume/main17/main17_main_goto_town_17.png")
+	I_MAIN_GOTO_TOWN_17 = RuleImage(roi_front=(1014,341,23,42), roi_back=(936,292,179,150), threshold=0.8, method="Template matching", file="./tasks/Component/Costume/main17/main17_main_goto_town_17.png")
 	# 宠物屋 
 	I_PET_HOUSE_17 = RuleImage(roi_front=(1244,428,33,28), roi_back=(1239,358,40,160), threshold=0.8, method="Template matching", file="./tasks/Component/Costume/main17/main17_pet_house_17.png")
 
