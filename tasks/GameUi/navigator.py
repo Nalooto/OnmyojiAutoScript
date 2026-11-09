@@ -67,6 +67,13 @@ class GameUi(ChessBattleNavigationMixin, BaseTask, GameUiAssets):
         self.navigator = NavigatorSession(task_category=self._infer_task_category())
         self.navigator.bootstrap(PageRegistry.all())
 
+    def prepare_battle_cooperation(self, task: str) -> None:
+        """直接执行任务时补齐协同准备；未配置协同脚本时为无操作。"""
+
+        from module.cooperation import prepare_battle_cooperation
+
+        prepare_battle_cooperation(self, task)
+
     def _infer_task_category(self) -> str:
         """根据当前任务模块路径推断任务分类。
 

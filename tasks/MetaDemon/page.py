@@ -1,3 +1,4 @@
+from module.atom.click import RuleClick
 from tasks.GameUi.assets import GameUiAssets
 from tasks.GameUi.page import (
     Page,
@@ -11,6 +12,13 @@ from tasks.GameUi.page import (
 )
 from tasks.GlobalGame.assets import GlobalGameAssets
 from tasks.MetaDemon.assets import MetaDemonAssets
+
+
+def reward_random_click() -> RuleClick:
+    """奖励页只取左右安全区，避免点到底部按钮。"""
+
+    return random_click(ltrb=(True, False, True, False))
+
 
 page_act_list_meta_demon = Page(MetaDemonAssets.I_CHECK_ACT_LIST_METADEMON_ACT)
 page_act_list.connect(page_act_list_meta_demon, MetaDemonAssets.L_GOTO_METADEMON_LIST, key="page_act_list->page_act_list_meta_demon")
