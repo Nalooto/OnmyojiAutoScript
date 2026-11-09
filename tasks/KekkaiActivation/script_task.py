@@ -74,73 +74,163 @@ class ScriptTask(KU, KekkaiActivationAssets):
         return {v: k for k, v in self.dict_card_image.items()}
     
     @cached_property
-    def star_mapping(self) -> dict:
-        """根据配置的星级返回目标卡和干扰卡的图片列表"""
-        card_star = self.config.kekkai_activation.activation_config.card_star
-        target_star = card_star.to_int()  # 获取目标星级数值
-        
-        # 定义卡片列表
-        cards = {
-            CardType.TAIKO: [
-                (6, self.I_CARDS_KAIKO_6),
-                (5, self.I_CARDS_KAIKO_5),
-                (4, self.I_CARDS_KAIKO_4),
-                (3, self.I_CARDS_KAIKO_3),
-            ],
-            CardType.FISH: [
-                (6, self.I_CARDS_FISH_6),
-                (5, self.I_CARDS_FISH_5),
-                (4, self.I_CARDS_FISH_4),
-                (3, self.I_CARDS_FISH_3),
-            ]
-        }
-        
-        result = {'target_images': {}, 'higher_images': {}}
-        
-        for card_type, card_list in cards.items():
-            # 目标卡：星级 ≤ 目标星级
-            result['target_images'][card_type] = [
-                card for star, card in card_list if star <= target_star
-            ]
-            # 干扰卡：星级 > 目标星级
-            result['higher_images'][card_type] = [
-                card for star, card in card_list if star > target_star
-            ]
-        
-        return result
-    
+    def card_star_images(self) -> List[Tuple[int, RuleImage]]:
+        """当前卡种类下的全部星级模板，按星级从高到低排列
+
+        挂卡界面的卡片列表是按星级排序的，拿到“每一行是哪一星”之后
+        就能按单张卡判断是否满足 card_star，不需要整页跳过。
+        """
+        rule = self.config.kekkai_activation.activation_config.card_type
+        prefix = 'fish' if rule == CardType.FISH else 'taiko'
+        images = []
+        for image, card_class in self.dict_image_card.items():
+            family, _, star = card_class.value.rpartition('_')
+            if family != prefix or not star.isdigit():
+                continue
+            images.append((int(star), image))
+        images.sort(key=lambda item: item[0], reverse=True)
+        return images
+
+    def _detect_page_cards(self) -> List[Tuple[int, float, Tuple[int, int, int, int]]]:
+        """识别当前页所有的结界卡，返回 [(星级, 置信度, 位置)]"""
+        images = [image for _, image in self.card_star_images]
+        if not images:
+            return []
+        raw = ImageGrid(images).find_everyone(
+            self.device.image,
+            frame_id=self.device.image_frame_id,
+        )
+        if not raw:
+            return []
+        matches = []
+        for image, score, area in raw:
+            card_class = self.dict_image_card.get(image)
+            if card_class is None:
+                continue
+            star = int(card_class.value.rpartition('_')[2])
+            matches.append((star, float(score), tuple(area)))
+        return matches
+
+    def _star_of_result(
+        self,
+        result: Any,
+        matches: List[Tuple[int, float, Tuple[int, int, int, int]]],
+        tolerance: int = 70,
+        near: int = 8,
+    ) -> Optional[int]:
+        """把 OCR 到的收益文字按纵向位置对到具体卡片上，返回该卡星级
+
+        列表行距只有 ~146px，下一行的模板命中很容易落进本行的容差里，
+        所以必须先按“距离最近”归属，不能按置信度高低选：
+        置信度高的往往是隔壁那张卡的模板，按它判会张冠李戴。
+
+        :param result: 单条 OCR 结果（坐标为 ROI 内坐标）
+        :param matches: _detect_page_cards 的结果
+        :param tolerance: 收益文字与卡片区域的最大允许纵向偏差
+        :param near: 认定“同一行”的距离容差
+        :return: 星级，无法判定时返回 None
+        """
+        roi_y = self.O_CHECK_CARD_NUMBER.roi[1]
+        y_center = roi_y + (result.box[0][1] + result.box[2][1]) / 2
+        candidates = []
+        for star, score, area in matches:
+            top = area[1]
+            bottom = area[1] + area[3]
+            if top <= y_center <= bottom:
+                distance = 0
+            else:
+                distance = min(abs(y_center - top), abs(y_center - bottom))
+            if distance > tolerance:
+                continue
+            candidates.append((distance, score, star))
+        if not candidates:
+            return None
+
+        candidates.sort(key=lambda item: (item[0], -item[1]))
+        nearest = candidates[0][0]
+        tied = [item for item in candidates if item[0] <= nearest + near]
+        stars = {item[2] for item in tied}
+        if len(stars) > 1:
+            # 同一行同时命中多个星级：取更高星，宁可漏挂也不挂错星
+            chosen = max(stars)
+            logger.warning(
+                f'⚠️ 卡片星级判定冲突 {result.ocr_text}: '
+                f'{[(star, round(score, 3), distance) for distance, score, star in tied]}'
+                f' → 保守按{chosen}星处理'
+            )
+            return chosen
+        return tied[0][2]
+
     def _select_best_card_from_results(
-        self, 
-        filtered_results: List[Any], 
-        min_card_num: int, 
-        ocr_count: int
+        self,
+        filtered_results: List[Any],
+        matches: List[Tuple[int, float, Tuple[int, int, int, int]]],
+        min_card_num: int,
+        target_star: int,
+        ocr_count: int,
     ) -> Optional[RuleClick]:
         """
         从过滤后的OCR结果中选择最佳卡片
+
+        判定顺序：收益达标 → 星级不高于配置星级 → 取收益最高。
+        页面里出现更高星的卡不再整页跳过，只跳过那张卡本身。
         :param filtered_results: 过滤后的OCR结果列表
+        :param matches: 当前页识别到的卡片（星级/置信度/位置）
         :param min_card_num: 最低收益阈值
+        :param target_star: 配置允许的最高星级
         :param ocr_count: 当前OCR计数
         :return: 选中的RuleClick对象，或None
         """
-        logger.info(f"第{ocr_count}次滑动后识别到卡: {[result.ocr_text for result in filtered_results]}")
-        
-        # 提取数字并按数字排序
-        numeric_results = []
+        records = []
+        best_seen = getattr(self, '_best_seen', (0, None))
         for result in filtered_results:
             numbers = [int(num) for num in re.findall(r'\d+', result.ocr_text)]
-            if numbers:
-                if numbers[0] < min_card_num:
-                    logger.debug(f"卡牌收益 {numbers[0]} 低于阈值 {min_card_num}，跳过")
-                    continue
-                numeric_results.append((numbers[0], result))
-        
-        if numeric_results:
-            # 按数字大到小排序
-            sorted_results = [result for _, result in sorted(numeric_results, key=lambda x: x[0], reverse=True)]
-            max_result = sorted_results[0]
-            
-            return self._create_click_target(max_result)
-        
+            if not numbers:
+                continue
+            value = numbers[0]
+            star = self._star_of_result(result, matches)
+            # 记录本轮见到的最高收益，未找到卡时用于说明"阈值是否定高了"
+            if value > best_seen[0]:
+                best_seen = (value, star)
+            if value < min_card_num:
+                logger.debug(f"卡牌收益 {value} 低于阈值 {min_card_num}，跳过")
+                continue
+            records.append((value, star, result))
+        self._best_seen = best_seen
+
+        logger.info(
+            "第%s次滑动后识别到卡: %s" % (
+                ocr_count,
+                [
+                    f'{result.ocr_text}@{star if star is not None else "?"}星'
+                    for _, star, result in records
+                ],
+            )
+        )
+        if not records:
+            return None
+
+        eligible = [item for item in records if item[1] is not None and item[1] <= target_star]
+        if eligible:
+            value, star, result = max(eligible, key=lambda item: item[0])
+            logger.info(f'✅ 命中{star}星卡片，收益 {value}')
+            return self._create_click_target(result)
+
+        unknown = [item for item in records if item[1] is None]
+        if unknown and (not matches or target_star >= 6):
+            # 整页都没识别到星级（模板整体失效），或配置本身就是“6星及以下”
+            # （星级不构成限制）时，按收益兜底选择
+            value, _, result = max(unknown, key=lambda item: item[0])
+            logger.warning(f'⚠️ 星级无法判定，按收益兜底选择: {result.ocr_text}（{value}）')
+            return self._create_click_target(result)
+
+        if unknown:
+            logger.warning(
+                '⚠️ 达标但星级无法判定，按配置保守跳过: %s'
+                % [result.ocr_text for _, _, result in unknown]
+            )
+        else:
+            logger.info(f'本页达标卡片均高于配置的{target_star}星，继续滑动')
         return None
 
 
@@ -341,11 +431,17 @@ class ScriptTask(KU, KekkaiActivationAssets):
                         continue
 
     def check_card_num(self):
+        """按“每张卡的星级 + 每小时收益”挑卡
+
+        旧实现用“页面里出现更高星卡就整页跳过”来保证 card_star 语义，
+        但列表首屏/混排页经常同时命中目标星和更高星模板，整页会被丢掉，
+        结果永远选不到卡。这里改成先定位每张卡所在行，再逐张判断。
+        """
         con = self.config.kekkai_activation.activation_config
         rule = con.card_type
-        card_star = con.card_star
+        target_star = con.card_star.to_int()
         swipe_limit = con.swipe_retry_limit
-        
+
         if rule == CardType.TAIKO:
             min_card_num = con.min_taiko_num
             check_card = "勾玉"
@@ -355,66 +451,34 @@ class ScriptTask(KU, KekkaiActivationAssets):
         else:
             logger.error('Unknown utilize rule')
             raise ValueError('Unknown utilize rule')
-        
-        # 获取目标卡和干扰卡图片列表
-        star_mapping = self.star_mapping
-        target_images = star_mapping['target_images'].get(rule, [])
-        higher_images = star_mapping['higher_images'].get(rule, [])
-        
+
         ocr_count = 0
-        has_ever_seen_target = False
-        
+        self._best_seen = (0, None)
         while True:
             self.screenshot()
-            
-            # 如果从未见过目标卡，检查当前页面是否有目标卡
-            if not has_ever_seen_target:
-                for target_image in target_images:
-                    if self.appear(target_image):
-                        has_ever_seen_target = True
-                        logger.info(f'首次检测到目标卡: {target_image.name}')
-                        break
-                
-                if has_ever_seen_target:
-                    # 检查是否有干扰卡（适用于所有有干扰卡的模式）
-                    has_higher = False
-                    for higher_image in higher_images:
-                        if self.appear(higher_image):
-                            has_higher = True
-                            logger.info(f'检测到干扰卡: {higher_image.name}')
-                            break
-                    
-                    if has_higher:
-                        logger.info(f'{card_star.value}模式下检测到干扰卡，跳过当前页')
-                        success, ocr_count = self._perform_swipe_action(
-                            ocr_count, swipe_limit, "跳过当前页"
-                        )
-                        if not success:
-                            return None
-                        continue
-                else:
-                    # 没有找到目标卡，执行常规滑动
-                    success, ocr_count = self._perform_swipe_action(ocr_count, swipe_limit, "未找到目标卡，滑动")
-                    if not success:
-                        return None
-                    continue
 
-            # 常规OCR识别逻辑
+            # 先定位当前页每张卡的星级，再把 OCR 到的收益对到卡上
+            matches = self._detect_page_cards()
+            if matches:
+                logger.info(
+                    '本页卡片: %s' % [
+                        (star, round(score, 3), area[1]) for star, score, area in matches
+                    ]
+                )
+
             results = self.O_CHECK_CARD_NUMBER.detect_and_ocr(self.device.image)
-            
-            # 执行常规OCR检查
             filtered_results = [result for result in results if check_card in result.ocr_text]
-            
-            # 从结果中选择最佳卡片
-            result = self._select_best_card_from_results(filtered_results, min_card_num, ocr_count)
+
+            result = self._select_best_card_from_results(
+                filtered_results, matches, min_card_num, target_star, ocr_count
+            )
             if result:
                 logger.info(f"选择挂卡: [{result.name}]")
                 return result
-            
-            # 使用滑动函数处理常规滑动
+
             success, ocr_count = self._perform_swipe_action(ocr_count, swipe_limit)
             if not success:
-                return None            
+                return None
             continue
 
     def _card_not_found(self):
@@ -425,6 +489,24 @@ class ScriptTask(KU, KekkaiActivationAssets):
         retry_count = 3
         # 递增未找到卡的计数器
         activation_config.card_not_found_count += 1
+
+        # 说明这次为什么没选到：本轮最高收益 vs 配置阈值 / 星级限制
+        best_value, best_star = getattr(self, '_best_seen', (0, None))
+        if best_value:
+            min_num = (
+                activation_config.min_taiko_num
+                if activation_config.card_type == CardType.TAIKO
+                else activation_config.min_fish_num
+            )
+            star_text = f'{best_star}星' if best_star is not None else '星级未知'
+            logger.warning(
+                f'本轮扫到的最高收益: {best_value}（{star_text}），'
+                f'阈值 {min_num}，星级上限 {activation_config.card_star.value}'
+            )
+            if best_value < min_num:
+                logger.warning('收益阈值高于卡池实际收益，任务会一直失败，请调低阈值或放宽星级')
+        else:
+            logger.warning('本轮没有 OCR 到任何结界卡收益，可能列表为空或界面不在挂卡页')
 
         if activation_config.card_not_found_count >= retry_count:
             # 达到重试上限时的处理

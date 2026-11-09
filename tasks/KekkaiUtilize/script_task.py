@@ -640,6 +640,10 @@ class ScriptTask(GameUi, ReplaceShikigami, KekkaiUtilizeAssets):
                 f'进入好友结界失败: {type(error).__name__}'
             )
         # 判断好友的有两个位置还是一个坑位
+        # 注意: I_U_ADD_1 / I_U_ADD_2 实际裁的是右上角常驻的「友」按钮，
+        # 只适合当「仍在好友结界页」的锚点；寄养成功后它不会消失，
+        # 因此不能用它作为选式神循环的结束条件（否则会一直空点到点击保护）。
+        # 真正的结束由 set_shikigami 的 single_shot 负责：确认提交即退出。
         stop_image = None
         self.screenshot()
         if self.appear(self.I_U_ADD_1):  # 右侧第一个有（无论左侧有没有）
@@ -660,7 +664,11 @@ class ScriptTask(GameUi, ReplaceShikigami, KekkaiUtilizeAssets):
             # 切换式神的类型
             self.switch_shikigami_class(shikigami_class)
             # 上式神
-            self.set_shikigami(shikigami_order, stop_image)
+            if not self.set_shikigami(shikigami_order, stop_image, single_shot=True):
+                return self._record_utilize_failure(
+                    '式神寄养点击无响应，目标坑位不可用',
+                    entered_realm=True,
+                )
         except (GamePageUnknownError, GameStuckError) as error:
             return self._record_utilize_failure(
                 f'式神寄养失败: {type(error).__name__}',
