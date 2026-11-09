@@ -380,8 +380,11 @@ class ScriptTask(GameUi, Summon, DailyTriflesAssets, AssetStats):
         check_timer.start()
         while 1:
             self.screenshot()
-
+            if self.ui_reward_appear_click():
+                logger.info('Get reward of luck msg')
+                break
             if self.appear_then_click(self.I_CLICK_BLESS, interval=1):
+                sleep(2)
                 continue
             if self.appear_then_click(self.I_ONE_CLICK_BLESS, interval=1):
                 continue
