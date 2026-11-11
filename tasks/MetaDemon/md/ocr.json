@@ -33,7 +33,7 @@
     "mode": "Single",
     "method": "Default",
     "keyword": "",
-    "description": ""
+    "description": "首领名称"
   },
   {
     "itemName": "metademon_pass_exp",
@@ -51,6 +51,6 @@
     "mode": "Single",
     "method": "Default",
     "keyword": "已分享：1人",
-    "description": ""
+    "description": "协助已分享人数"
   }
 ]

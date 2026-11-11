@@ -389,9 +389,8 @@ class BossBattle(GeneralBattle, SwitchSoul, QuickLoadout, GameUi, MetaDemonAsset
         if getattr(self, '_active_loadout_group', None) == loadout_key:
             return True
         if category == 'high_star' and self.conf.general_config.high_star_quick_loadout_enable:
-            from tasks.Component.QuickLoadout.config import QuickLoadoutConfig
             soul = self.conf.switch_soul_config.switch_for(category)
-            quick = QuickLoadoutConfig(enable=True, group_name=soul.group_name, preset_name=soul.team_name)
+            quick = None
             if custom_enabled:
                 try:
                     presets = custom.named_presets()
@@ -410,7 +409,9 @@ class BossBattle(GeneralBattle, SwitchSoul, QuickLoadout, GameUi, MetaDemonAsset
                 if target is None:
                     logger.error(f'首领 {boss_name} 无匹配预设，请配置对应名称或 ALL')
                     return False
-                quick.group_name, quick.preset_name = target
+                quick = self._quick_loadout_target(soul, target)
+            else:
+                quick = self._quick_loadout_target(soul)
             # 本地面板的关闭点击区仅用于失败回退，避免误触鬼王界面的其他按钮。
             if not self.run_quick_loadout(
                 quick,
@@ -435,6 +436,59 @@ class BossBattle(GeneralBattle, SwitchSoul, QuickLoadout, GameUi, MetaDemonAsset
             shared.pop(f'meta_demon_{category}', None)
         self._active_loadout_group = loadout_key
         return True
+
+    @staticmethod
+    def _parse_group_team(text: str) -> tuple[int, int] | None:
+        """解析 "分组,队号"，只接受快捷面板支持的 1-7 组、1-9 号预设。"""
+        parts = str(text).replace('，', ',').split(',')
+        if len(parts) != 2:
+            return None
+        try:
+            group, preset = (int(part.strip()) for part in parts)
+        except ValueError:
+            return None
+        if 1 <= group <= 7 and 1 <= preset <= 9:
+            return group, preset
+        return None
+
+    def _quick_loadout_target(self, soul, target=None):
+        """生成快捷上阵面板的目标配置。
+
+        面板既能按名称 OCR 定位，也能按编号定位：名称完整时走 OCR，
+        否则退回编号；两者都没配置时保持旧行为（第 1 组第 1 个预设）。
+        """
+        from tasks.Component.QuickLoadout.config import QuickLoadoutConfig, QuickLoadoutMode
+
+        if target is not None:
+            group, preset = target
+            if isinstance(group, int) and not isinstance(group, bool) \
+                    and isinstance(preset, int) and not isinstance(preset, bool):
+                return QuickLoadoutConfig(enable=True, mode=QuickLoadoutMode.NUMBER,
+                                          group_number=group, preset_number=preset)
+            group, preset = str(group).strip(), str(preset).strip()
+            if group and preset:
+                return QuickLoadoutConfig(enable=True, mode=QuickLoadoutMode.OCR,
+                                          group_name=group, preset_name=preset)
+            logger.warning(f'自定义预设名称不完整，改用默认预设: {target}')
+            return QuickLoadoutConfig(enable=True)
+
+        group_name = (soul.group_name or '').strip()
+        preset_name = (soul.team_name or '').strip()
+        if soul.enable_switch_by_name and group_name and preset_name:
+            return QuickLoadoutConfig(enable=True, mode=QuickLoadoutMode.OCR,
+                                      group_name=group_name, preset_name=preset_name)
+        parsed = self._parse_group_team(soul.switch_group_team)
+        if parsed is None:
+            if soul.enable_switch_by_name:
+                logger.warning('已开启按名称切换御魂，但分组名/预设名为空，快速上阵改用默认预设')
+            elif soul.enable:
+                logger.warning(f'高星快速上阵编号无效（{soul.switch_group_team}），使用第 1 组第 1 个预设')
+            else:
+                logger.info('高星快速上阵未指定预设，使用第 1 组第 1 个预设')
+            return QuickLoadoutConfig(enable=True)
+        group, preset = parsed
+        return QuickLoadoutConfig(enable=True, mode=QuickLoadoutMode.NUMBER,
+                                  group_number=group, preset_number=preset)
 
     def finish_task(self):
         self.finish_task_navigation()
