@@ -751,6 +751,26 @@ class GameUi(ChessBattleNavigationMixin, BaseTask, GameUiAssets):
         rotation_check()
         return False
 
+    def finish_task_navigation(self) -> None:
+        """任务收尾：重置本次任务的导航运行期状态。
+
+        任务结束时游戏界面留在哪里由后续任务自行识别，这里不做任何点击，
+        避免收尾阶段误触游戏界面；清理失败也不抛出，不影响任务本身的成败。
+        """
+
+        navigator = getattr(self, 'navigator', None)
+        if navigator is None:
+            return
+        try:
+            navigator.current_page = None
+            navigator.unknown_close_history.clear()
+            navigator.edge_penalties.clear()
+            navigator.last_enter_success_page_key = None
+        except Exception as e:
+            logger.warning(f'清理导航运行期状态失败，忽略: {e}')
+            return
+        logger.info('Navigation state cleared at task finish')
+
     def _finalize_arrival(self, destination: Page, confirm_wait: float, start_time: float) -> bool:
         """统一处理到达目标页后的收尾动作。
 
