@@ -38,6 +38,12 @@ class TicketGeneralConfig(ConfigBase):
     awake_layer: Layer = Field(default=Layer.SEVEN, title='觉醒层数',
         description='门票刷取：觉醒使用的层数，可选一至十层；默认七层。')
     exploration_target: ExplorationTarget = Field(default=ExplorationTarget.ALL, title='探索目标')
+    realm_raid_enable: bool = Field(default=False, title='突破券满时清个人突破',
+        description='仅「门票刷取：探索」+ 单人身份生效。探索过程中检测突破券，达到阈值时中断探索去清个人突破，'
+                    '清完切回本任务的御魂继续刷票；个人突破复用「个人突破」任务的配置。')
+    realm_raid_threshold: int = Field(default=20, ge=1, le=30, title='突破券清理阈值',
+        description='突破券达到该数量时触发清票。突破券上限 30，建议 20~25，'
+                    '阈值过高响应太晚，过低则频繁切换。')
 
 
     @property

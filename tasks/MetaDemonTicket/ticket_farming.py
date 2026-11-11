@@ -1,7 +1,8 @@
 """超鬼王门票刷取，复用觉醒和探索的战斗流程。"""
-from datetime import datetime
+from datetime import datetime, timedelta
 from cached_property import cached_property
 
+from module.exception import TaskEnd
 from module.logger import logger
 from tasks.Component.GeneralBattle.assets import GeneralBattleAssets
 from tasks.EvoZone.config import EvoZone, EvoZoneConfig, UserStatus as AwakeUserStatus
@@ -11,11 +12,13 @@ from tasks.Exploration.config import (
     UpType, UserStatus as ExplorationUserStatus,
 )
 from tasks.Exploration.script_task import ScriptTask as ExplorationTask
+import tasks.Exploration.page as exp_pages
 from tasks.GameUi.default_pages import page_reward
 import tasks.GameUi.page as pages
 from tasks.MetaDemonTicket.config import TicketMode, ExplorationTarget
 from tasks.MetaDemon.assets import MetaDemonAssets
 from tasks.GameUi.assets import GameUiAssets
+from tasks.RealmRaid.script_task import ScriptTask as RealmRaidTask
 
 
 class TicketsFull(Exception):
@@ -24,6 +27,15 @@ class TicketsFull(Exception):
 
 class TicketPartnerFinished(Exception):
     """协同伙伴结束门票阶段。"""
+
+
+class RealmRaidNeeded(Exception):
+    """突破券达到阈值，先中断探索清个人突破再继续刷票。"""
+
+
+# 突破券 OCR 间隔与清票冷却，避免识别抖动或清不干净时反复中断探索
+REALM_RAID_OCR_INTERVAL = 5
+REALM_RAID_RETRY_INTERVAL = timedelta(minutes=10)
 
 
 def metademon_tickets_full(task) -> bool:
@@ -54,6 +66,9 @@ class TicketRewardMixin:
         return result
 
     def check_ticket_reward(self):
+        # 个人突破的结算页不是超鬼王门票界面，跳过避免误读门票计数
+        if getattr(self, '_ticket_raid_running', False):
+            return
         if getattr(self, '_ticket_farming_complete', False) or getattr(self, '_ticket_full', False):
             return
         if metademon_tickets_full(self):
@@ -85,6 +100,12 @@ class AwakeTicketTask(TicketRewardMixin, AwakeTask):
 
 
 class ExplorationTicketTask(TicketRewardMixin, ExplorationTask):
+    """探索刷票；可在突破券达到阈值时中断探索去清个人突破，清完继续刷票。"""
+
+    _realm_raid_next: datetime = None
+    _realm_raid_ocr_next: datetime = None
+    _ticket_raid_running: bool = False
+
     @cached_property
     def _config(self):
         return ticket_farming_config(self.config.meta_demon_ticket, TicketMode.EXPLORATION)
@@ -105,9 +126,80 @@ class ExplorationTicketTask(TicketRewardMixin, ExplorationTask):
         return handlers
 
     def activate_realm_raid(self, con_scrolls, con, current_page):
-        """门票刷取不检测结界票，也不触发个人突破调度。"""
-        return
+        """检测突破券，达到阈值时中断探索循环去清个人突破。"""
+        meta = self.config.meta_demon_ticket.general_config
+        if not meta.realm_raid_enable:
+            return
+        if self.user_status != ExplorationUserStatus.ALONE:
+            return
+        if current_page not in (pages.page_exploration, exp_pages.page_exp_entrance):
+            return
+        now = datetime.now()
+        if self._realm_raid_next and now < self._realm_raid_next:
+            return
+        if self._realm_raid_ocr_next and now < self._realm_raid_ocr_next:
+            return
+        self._realm_raid_ocr_next = now + timedelta(seconds=REALM_RAID_OCR_INTERVAL)
+        counter = self.O_REALM_RAID_NUMBER1 if current_page == exp_pages.page_exp_entrance else self.O_REALM_RAID_NUMBER
+        current, _, total = counter.ocr(self.device.image)
+        if total <= 0 or current < 0:
+            return
+        if current >= meta.realm_raid_threshold:
+            logger.info(f'突破券 {current}/{total} 达到阈值 {meta.realm_raid_threshold}，先清个人突破')
+            raise RealmRaidNeeded
 
+    def run_realm_raid_round(self):
+        """复用个人突破任务配置清一次突破券，结束后切回门票御魂继续探索。"""
+        logger.hr('meta demon ticket realm raid', level=2)
+        self._realm_raid_next = datetime.now() + REALM_RAID_RETRY_INTERVAL
+        self._realm_raid_ocr_next = None
+        self._ticket_raid_running = True
+        try:
+            # 先用探索侧的导航退回探索入口，再交给个人突破流程接管页面跳转
+            self.goto_page(pages.page_exploration)
+            raid = RealmRaidTicketTask(self.config, self.device)
+            raid.start_time = datetime.now()
+            raid.current_count = 0
+            raid.run()
+        finally:
+            self._ticket_raid_running = False
+        # 只有个人突破实际切过御魂时才需要切回，避免多余的一次式神录往返
+        raid_soul = self.config.realm_raid.switch_soul_config
+        if raid_soul.enable or raid_soul.enable_switch_by_name:
+            self.restore_ticket_soul()
+        else:
+            logger.info('个人突破未启用切换御魂，个突结束后不切回')
+        self.goto_page(pages.page_exploration)
+        self.device.click_record_clear()
+
+    def restore_ticket_soul(self):
+        """个突会切成突破御魂，结束必须切回门票任务的御魂再继续刷探索。"""
+        soul = self._config.switch_soul_config
+        if not (soul.enable or soul.enable_switch_by_name):
+            logger.info('门票任务未启用切换御魂，个突结束后沿用突破御魂继续探索')
+            return
+        logger.info('切换回门票任务的御魂')
+        self.goto_page(pages.page_shikigami_records)
+        if soul.enable_switch_by_name:
+            self.run_switch_soul_by_name(soul.group_name, soul.team_name)
+        else:
+            self.run_switch_soul(soul.switch_group_team)
+
+
+class RealmRaidTicketTask(RealmRaidTask):
+    """门票刷取内联清突破券，不改动个人突破任务自身的调度时间。"""
+
+    def set_next_run(self, task: str, finish: bool = False,
+                     success: bool = None, server: bool = True, target: datetime = None) -> None:
+        if task == 'RealmRaid':
+            return
+        super().set_next_run(task=task, finish=finish, success=success, server=server, target=target)
+
+    def run(self):
+        try:
+            super().run()
+        except TaskEnd:
+            pass
 
 
 def ticket_farming_config(meta, mode):
@@ -150,6 +242,16 @@ def tickets_full_before_farming(owner) -> bool:
             return current >= total
     logger.warning('探索入口未识别到有效超鬼王门票计数，继续刷取并由奖励页检测满票')
     return False
+
+
+def run_exploration_farming(runner) -> None:
+    """探索刷票主循环；突破券达到阈值时先清一轮个人突破，再继续刷票。"""
+    while True:
+        try:
+            runner.exec_exp_page()
+            return
+        except RealmRaidNeeded:
+            runner.run_realm_raid_round()
 
 
 def run_ticket_farming(owner, mode) -> bool:
@@ -204,6 +306,8 @@ def run_ticket_farming(owner, mode) -> bool:
                 runtime.notify_task_completion('MetaDemonTicket', peer, 'tickets_full')
                 logger.info('本号门票已满，继续组队直到对方满票')
         if mode == TicketMode.AWAKE:
+            if config.meta_demon_ticket.general_config.realm_raid_enable:
+                logger.warning('突破券清理仅在「门票刷取：探索」下生效，本次觉醒刷票不检测突破券')
             soul = runner._config.switch_soul_config
             if soul.enable or soul.enable_switch_by_name:
                 runner.goto_page(pages.page_shikigami_records)
@@ -227,7 +331,7 @@ def run_ticket_farming(owner, mode) -> bool:
         else:
             runner.pre_process()
             runner.limit_time = limit_time
-            runner.exec_exp_page()
+            run_exploration_farming(runner)
     except TicketsFull:
         result = True
         if cooperation_started:
