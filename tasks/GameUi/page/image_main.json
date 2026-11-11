@@ -23,7 +23,7 @@
     "roiFront": "493,116,45,75",
     "roiBack": "243,100,933,211",
     "method": "Template matching",
-    "threshold": 0.8,
+    "threshold": 0.75,
     "description": "庭院探索标志"
   },
   {
@@ -164,8 +164,8 @@
   {
     "itemName": "check_mall",
     "imageName": "page_check_mall.png",
-    "roiFront": "231,455,131,78",
-    "roiBack": "201,432,185,121",
+    "roiFront": "818,375,100,83",
+    "roiBack": "796,351,128,124",
     "method": "Template matching",
     "threshold": 0.8,
     "description": "商店页面标志"
