@@ -20,11 +20,17 @@ class OpenExpectLevelTask(BaseExploration):
         self.O_E_EXPLORATION_LEVEL_NUMBER = SimpleNamespace(
             detect_and_ocr=lambda _image: next(chapter_results)
         )
+        self.C_CLICK_MAIN_LINE = SimpleNamespace(name='click_main_line')
         self.swipes = []
+        self.clicks = []
         self.chapter_selected = False
 
     def screenshot(self):
         self.device.image = object()
+
+    def click(self, click=None, interval=None):
+        self.clicks.append(click)
+        return True
 
     def appear(self, rule):
         return rule == self.I_E_EXPLORATION_CLICK and self.chapter_selected
@@ -54,6 +60,22 @@ class OpenExpectLevelTests(unittest.TestCase):
         ):
             task.open_expect_level()
 
+        self.assertEqual(task.swipes, [])
+        self.assertEqual(task.clicks, [])
+
+    @patch('tasks.Exploration.base.time.sleep')
+    def test_switches_back_to_main_line_when_panel_shows_play_tab(self, _sleep):
+        play_tab_texts = [
+            SimpleNamespace(ocr_text=text)
+            for text in ('活动', '御魂', '今日掉落', '真·八岐大蛇', '英杰试炼')
+        ]
+        target_chapter = [
+            SimpleNamespace(ocr_text=ExplorationLevel.EXPLORATION_27.value)
+        ]
+        task = OpenExpectLevelTask(iter([play_tab_texts, target_chapter]))
+
+        self.assertTrue(task.open_expect_level())
+        self.assertEqual(task.clicks, [task.C_CLICK_MAIN_LINE])
         self.assertEqual(task.swipes, [])
 
     @patch('tasks.Exploration.base.time.sleep')

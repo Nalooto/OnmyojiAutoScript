@@ -54,6 +54,8 @@ class ExplorationAssets:
 	C_CLICK_SETTINGS = RuleClick(roi_front=(55,662,21,21), roi_back=(55,662,21,21), name="click_settings")
 	# 选中候补出战 
 	C_CLICK_STANDBY_TEAM = RuleClick(roi_front=(545,222,506,100), roi_back=(545,222,506,100), name="click_standby_team")
+	# 探索右侧栏主线页签 
+	C_CLICK_MAIN_LINE = RuleClick(roi_front=(1081,173,32,24), roi_back=(1081,173,32,24), name="click_main_line")
 
 
 	# Image Rule Assets

@@ -114,11 +114,24 @@ class BaseExploration(GameUi, GeneralBattle, GeneralRoom, GeneralInvite, Replace
         self.set_next_run(task='Exploration', success=True, finish=False)
         raise TaskEnd
 
+    def switch_to_main_line_tab(self) -> bool:
+        """把探索右侧栏从「玩法」页切回「主线」页
+
+        仅在章节列表面板已展开（ROI 内有文字）时调用，此时页签位置固定，点击无副作用。
+        """
+        logger.info('Exploration side panel is not showing chapters, switch back to main line tab')
+        self.device.click_record_clear()
+        self.click(self.C_CLICK_MAIN_LINE, interval=0.8)
+        time.sleep(0.8)
+        return True
+
     # 打开指定的章节：
     def open_expect_level(self):
         swipeCount = 0
         ocr_miss_count = 0
         max_ocr_misses = 5
+        tab_switch_count = 0
+        max_tab_switch = 3
         config_exploration_level = self.config.exploration.exploration_config.exploration_level
         while True:
             # 判断有无目标章节
@@ -143,6 +156,11 @@ class BaseExploration(GameUi, GeneralBattle, GeneralRoom, GeneralInvite, Replace
             if self.appear_then_click(self.I_UI_CONFIRM_SAMLL, interval=1):
                 continue
             if not exp_level_enum_list:
+                # 有文字却一条章节名都解析不出来，说明右侧栏停在「玩法」页，切回主线重试
+                if text1 and tab_switch_count < max_tab_switch:
+                    tab_switch_count += 1
+                    self.switch_to_main_line_tab()
+                    continue
                 ocr_miss_count += 1
                 logger.warning(
                     f'Unable to recognize exploration chapter names '
@@ -151,7 +169,7 @@ class BaseExploration(GameUi, GeneralBattle, GeneralRoom, GeneralInvite, Replace
                 if ocr_miss_count >= max_ocr_misses:
                     raise GameStuckError(
                         f'Unable to recognize exploration chapter names after {max_ocr_misses} attempts; '
-                        'confirm the chapter selection is open and the list is unobstructed'
+                        'confirm the chapter selection is open, on the main line tab, and the list is unobstructed'
                     )
                 self.device.click_record_clear()
                 time.sleep(1)
